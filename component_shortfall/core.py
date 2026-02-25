@@ -28,7 +28,14 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
 
     # Plugin settings (from SettingsMixin)
     # Ref: https://docs.inventree.org/en/latest/plugins/mixins/settings/
-    SETTINGS = {}
+    SETTINGS = {
+        "HIDE_NO_SHORTFALL": {
+            "name": "Hide No Shortfall",
+            "description": "Hide results for parts which have no shortfall",
+            "default": False,
+            "validator": bool,
+        }
+    }
 
     # Custom URL endpoints (from UrlsMixin)
     # Ref: https://docs.inventree.org/en/latest/plugins/mixins/urls/
