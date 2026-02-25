@@ -1,0 +1,40 @@
+{
+  "name": "inventree-component-shortfall",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "extract": "lingui extract",
+    "compile": "lingui compile --typescript",
+    "translate": "lingui extract && lingui compile --typescript",
+    "lint": "npx @biomejs/biome check ./src",
+    "lint:fix": "npx @biomejs/biome check ./src --fix",
+    "build": "tsc -b && vite build --emptyOutDir",
+    "dev": "vite --config vite.dev.config.ts --host"
+  },
+  "dependencies": {
+    "@inventreedb/ui": "latest",
+    "react": ">= 19.1.2",
+    "react-dom": ">= 19.1.2",
+    "@mantine/core": ">= 8.3.10",
+    "@mantine/hooks": ">= 8.3.10",
+    "@mantine/modals": ">= 8.3.10",
+    "@mantine/notifications": ">= 8.3.10"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "2.0.0",
+    "@lingui/cli": "latest",
+    "@lingui/macro": "latest",
+    "@lingui/swc-plugin": "latest",
+    "@lingui/vite-plugin": "latest",
+    "@vitejs/plugin-react-swc": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "^4.7.0",
+    "globals": "^15.14.0",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.5",
+    "vite-plugin-externals": "^0.6.2"
+  }
+}
