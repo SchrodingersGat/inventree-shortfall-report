@@ -5,39 +5,24 @@ In practice, you would define your custom serializers here.
 Ref: https://www.django-rest-framework.org/api-guide/serializers/
 """
 
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+import part.models
 
-class ExampleSerializer(serializers.Serializer):
-    """Example serializer for the ComponentShortfall plugin.
 
-    This simply demonstrates how to create a serializer,
-    with a few example fields of different types.
-    """
+class ShortfallReportRequestSerializer(serializers.Serializer):
+    """Serializer for shortfall report request parameters."""
 
-    class Meta:
-        """Meta options for this serializer."""
-
-        fields = [
-            "random_text",
-            "part_count",
-            "today",
-        ]
-
-    random_text = serializers.CharField(
-        max_length=100,
+    part = serializers.PrimaryKeyRelatedField(
+        queryset=part.models.Part.objects.all(),
+        many=False,
         required=True,
-        label="Random Text",
-        help_text="A text field containing randomly generated data.",
+        label=_("Part"),
+        help_text=_("The part for which to retrieve forecasting data"),
     )
 
-    part_count = serializers.IntegerField(
-        label="Number of Parts",
-        help_text="Total number of parts in the InvenTree database.",
-    )
-
-    today = serializers.DateField(
+    include_variants = serializers.BooleanField(
         required=False,
-        label="Today",
-        help_text="The current date.",
+        default=True,
     )

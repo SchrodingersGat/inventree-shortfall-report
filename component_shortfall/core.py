@@ -35,11 +35,15 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
     def setup_urls(self):
         """Configure custom URL endpoints for this plugin."""
         from django.urls import path
-        from .views import ExampleView
+        from .views import ShortfallReportView
 
         return [
             # Provide path to a simple custom view - replace this with your own views
-            path("example/", ExampleView.as_view(), name="example-view"),
+            path(
+                "shortfall/",
+                ShortfallReportView.as_view(),
+                name="shortfall-report-view",
+            ),
         ]
 
     # User interface elements (from UserInterfaceMixin)
