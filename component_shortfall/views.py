@@ -26,11 +26,18 @@ class ShortfallReportView(CreateAPI):
         serializer.is_valid(raise_exception=True)
 
         # Extract validated data
-        part = serializer.validated_data["part"]
+        part = serializer.validated_data.get("part", None)
+        category = serializer.validated_data.get("category", None)
+
         include_variants = serializer.validated_data["include_variants"]
 
-        return Response({
-            "message": "oh, ok...",
-            "part": part.pk,
-            "include_variants": include_variants,
-        })
+        # TODO: Fill out response
+        data = {
+            'part': part,
+            'category': category,
+            'include_variants': include_variants,
+            'output': None
+        }
+
+        return Response(ShortfallReportSerializer(data).data)
+

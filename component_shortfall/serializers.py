@@ -44,3 +44,14 @@ class ShortfallReportSerializer(serializers.Serializer):
         read_only=True,
         allow_null=True,
     )
+
+    def validate(self, data):
+        """Validate the provided data."""
+
+        if not data.get('part') and not data.get('category'):
+            raise serializers.ValidationError(_("Either 'part' or 'category' must be provided"))
+
+        if data.get('part') and data.get('category'):
+            raise serializers.ValidationError(_("Only one of 'part' or 'category' can be provided"))
+
+        return data
