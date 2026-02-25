@@ -28,15 +28,7 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
 
     # Plugin settings (from SettingsMixin)
     # Ref: https://docs.inventree.org/en/latest/plugins/mixins/settings/
-    SETTINGS = {
-        # Define your plugin settings here...
-        "CUSTOM_VALUE": {
-            "name": "Custom Value",
-            "description": "A custom value",
-            "validator": int,
-            "default": 42,
-        }
-    }
+    SETTINGS = {}
 
     # Custom URL endpoints (from UrlsMixin)
     # Ref: https://docs.inventree.org/en/latest/plugins/mixins/urls/
@@ -65,17 +57,12 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
 
         items.append({
             "key": "component-shortfall-dashboard",
-            "title": "Component Shortfall Dashboard Item",
-            "description": "Custom dashboard item",
-            "icon": "ti:dashboard:outline",
+            "title": "Shortfall Report",
+            "description": "Generate a component shortfall report",
+            "icon": "ti:clipboard-check:outline",
             "source": self.plugin_static_file(
                 "Dashboard.js:renderComponentShortfallDashboardItem"
             ),
-            "context": {
-                # Provide additional context data to the dashboard item
-                "settings": self.get_settings_dict(),
-                "bar": "foo",
-            },
         })
 
         return items
@@ -84,10 +71,10 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
         """Return a list of custom spotlight actions to be made available."""
         return [
             {
-                "key": "sample-spotlight-action",
-                "title": "Hello Action",
-                "description": "Hello from ComponentShortfall",
-                "icon": "ti:heart-handshake:outline",
+                "key": "shortfall-action",
+                "title": "Shortfall Report",
+                "description": "Generate a component shortfall report",
+                "icon": "ti:clipboard-check:outline",
                 "source": self.plugin_static_file(
                     "Spotlight.js:ComponentShortfallSpotlightAction"
                 ),
