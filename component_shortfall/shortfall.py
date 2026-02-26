@@ -13,6 +13,7 @@ For the provided set of parts, we want to detemine a complete list of all sub-co
 
 import structlog
 
+import common.models as common_models
 import part.models as part_models
 
 
@@ -27,6 +28,28 @@ def get_subassemblies(part):
     ).filter(consumable=False)
 
 
+def get_part_requirements(part, requirements: dict, quantity=1):
+    """Return requirements for the given part.
+    
+    Arguments:
+        part: The part to process
+        quantity: The quantity of the part to process
+        requirements: A dict of part requirements (may be updated)
+
+    Returns:
+        A dict of part requirements, with the following keys:
+        - stock: The available stock of the part
+        - on_order: The quantity of the part currently on order
+        - building: The quantity of the part currently being built
+        - required: The required quantity of the part (for sales order and build orders)
+    """
+
+    requirements = requirements or {}
+
+    # TODO
+    return {}
+
+
 def calculate_shortfall(component_id_list: list[int], output_id: int):
     """Calculate the component shortfall for a given list of component IDs.
     
@@ -38,14 +61,46 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
     # We keep a track of the required components (based on their ID)
     # Each element in the dict will be a dict with the following keys:
     # - part: The part object
-    # - required: The required quantity of the part
+    # - requirements: The required quantity of the part
     required_components : dict = {}
 
-    for component_id in component_id_list:
-        try:
-            part = part_models.Part.objects.get(pk=component_id)
-        except part_models.Part.DoesNotExist:
-            logger.warning(f"component_shortfall: Part with ID {component_id} does not exist - skipping")
-            continue
+    # A list of components that we need to process
+    # Each entry is a tuple of (part, quantity)
+    components_to_process = [
+        (part, 1) for part in part_models.Part.objects.filter(
+            pk__in=component_id_list,
+            active=True,
+            virtual=False,
+            )
+    ]
 
-    print("PROCESSING COMPLETE")
+    try:
+        data_output = common_models.DataOutput.objects.get(pk=output_id)
+    except common_models.DataOutput.DoesNotExist:
+        logger.error(f"component_shortfall: DataOutput with ID {output_id} does not exist - cannot save results")
+        return
+
+    # Update initial conditions for the data output
+    data_output.progress = 0
+    data_output.total = len(components_to_process)
+    data_output.save()
+
+    while components_to_process:
+        part, quantity = components_to_process.pop(0)
+        data_output.progress +=1 
+
+        print(".. processing ...", part, quantity)
+
+        # Update every 50 iterations
+        if data_output.progress % 50 == 0:
+            data_output.save()
+
+        continue
+
+        # TODO: Get the required BOM items for this part
+
+    # TODO: Attach the generated file to the data output
+
+    # Finally, ensure the data output is marked as complete
+    data_output.complete = True
+    data_output.save()
