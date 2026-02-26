@@ -9,6 +9,8 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from InvenTree.mixins import CreateAPI
 
+from common.models import DataOutput
+import part.models as part_models
 from .serializers import ShortfallReportSerializer
 
 
@@ -31,12 +33,44 @@ class ShortfallReportView(CreateAPI):
 
         include_variants = serializer.validated_data["include_variants"]
 
+        part_id_list = []
+
+        # Extract the top-level parts that we are interested in
+
+        if part:
+            if include_variants:
+                # Find all active assembly variants of the specified part
+                part_id_list = [
+                    p.pk for p in part.get_descendants(include_self=True)
+                    if p.active
+                ]
+            else:
+                part_id_list = [part.pk]
+        elif category:
+            # Find all child categories
+            categories = category.get_descendants(include_self=True)
+            
+            # Find all active parts within the provided category
+            part_id_list = [
+                p.pk for p in part_models.Part.objects.filter(
+                category__in=categories, active=True
+                )
+            ]
+
+        data_output = DataOutput.objects.create(
+            user=request.user,
+            total=len(part_id_list),
+            progress=0,
+            output_type='shortfall_report',
+            plugin='component-shortfall'
+        )
+
         # TODO: Fill out response
         data = {
             'part': part,
             'category': category,
             'include_variants': include_variants,
-            'output': None
+            'output': data_output
         }
 
         return Response(ShortfallReportSerializer(data).data)
