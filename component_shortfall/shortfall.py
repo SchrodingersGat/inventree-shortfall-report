@@ -9,4 +9,6 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
         output_id: The ID of the DataOutput (where to save the results)
     """
 
-    
+    print("- calculate shortfall:")
+    print("-- part id:", component_id_list)
+    print("-- output id:", output_id)

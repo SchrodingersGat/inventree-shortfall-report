@@ -8,10 +8,12 @@ Ref: https://www.django-rest-framework.org/api-guide/views/
 from rest_framework import permissions
 from rest_framework.response import Response
 from InvenTree.mixins import CreateAPI
+from InvenTree.tasks import offload_task
 
 from common.models import DataOutput
 import part.models as part_models
 from .serializers import ShortfallReportSerializer
+from .shortfall import calculate_shortfall
 
 
 class ShortfallReportView(CreateAPI):
@@ -65,7 +67,15 @@ class ShortfallReportView(CreateAPI):
             plugin='component-shortfall'
         )
 
-        # TODO: Fill out response
+        # This report may be expensive to calculate
+        # Offload to the background worker process
+        offload_task(
+            calculate_shortfall,
+            component_id_list=part_id_list,
+            output_id=data_output.pk,
+            group='shortfall_report',
+        )
+
         data = {
             'part': part,
             'category': category,
