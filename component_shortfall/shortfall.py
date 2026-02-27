@@ -11,7 +11,11 @@ For the provided set of parts, we want to detemine a complete list of all sub-co
 
 """
 
+from decimal import Decimal
 import structlog
+import tablib
+
+from django.core.files.base import ContentFile
 
 import common.models as common_models
 import part.models as part_models
@@ -28,13 +32,13 @@ def get_subassemblies(part):
     ).filter(consumable=False)
 
 
-def get_part_requirements(part, requirements: dict, quantity=1):
+def update_part_requirements(part, component_data: dict, additonal_requirements=0, include_variants: bool = False):
     """Return requirements for the given part.
     
     Arguments:
         part: The part to process
-        quantity: The quantity of the part to process
-        requirements: A dict of part requirements (may be updated)
+        additonal_requirements: The additional quantity required for the part
+        component_data: A dict of part requirements (may be updated)
 
     Returns:
         A dict of part requirements, with the following keys:
@@ -42,12 +46,36 @@ def get_part_requirements(part, requirements: dict, quantity=1):
         - on_order: The quantity of the part currently on order
         - building: The quantity of the part currently being built
         - required: The required quantity of the part (for sales order and build orders)
+        - allocated: The allocated quantity of the part (for sales order and build orders)
     """
 
-    requirements = requirements or {}
+    requirements = component_data.get(part.pk, None) or {}
 
-    # TODO
-    return {}
+    # Store the part information against the part
+    requirements['part'] = part
+
+    # Fetch (or calculate) the various stock values for this part
+    requirements['stock'] = requirements.get('stock', part.get_stock_count(include_variants=False))
+    requirements['on_order'] = requirements.get('on_order', part.on_order)
+    requirements['allocated'] = requirements.get('allocated', part.allocation_count())
+    requirements['building'] = requirements.get('building', part.quantity_being_built)
+    requirements['in_production'] = requirements.get('in_production', part.quantity_in_production)
+    requirements['base_requirements'] = requirements.get('base_requirements', part.required_order_quantity())
+
+    # Track the total "additional" requirements for this part (based on the parent assembly requirements)
+    # The 'additional_requirements' may increase as we process more parent assemblies which require this part as a sub-component
+    requirements['additional_requirements'] = requirements.get('additional_requirements', Decimal(0)) + Decimal(additonal_requirements)
+
+    requirements['required'] = requirements['base_requirements'] + requirements['additional_requirements']
+
+    # Calculate the "shortfall" for the part
+    requirements['shortfall'] = max(
+        0,
+        requirements['required'] - requirements['stock'] - requirements['on_order'] - requirements['in_production']
+    )
+
+    # Update the global dict of component data
+    component_data[part.pk] = requirements
 
 
 def calculate_shortfall(component_id_list: list[int], output_id: int):
@@ -62,12 +90,12 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
     # Each element in the dict will be a dict with the following keys:
     # - part: The part object
     # - requirements: The required quantity of the part
-    required_components : dict = {}
+    component_data : dict = {}
 
     # A list of components that we need to process
-    # Each entry is a tuple of (part, quantity)
+    # Each entry is a tuple of (part, extra_quantity, level)
     components_to_process = [
-        (part, 1) for part in part_models.Part.objects.filter(
+        (part, 0, 0) for part in part_models.Part.objects.filter(
             pk__in=component_id_list,
             active=True,
             virtual=False,
@@ -86,21 +114,79 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
     data_output.save()
 
     while components_to_process:
-        part, quantity = components_to_process.pop(0)
+        part, extra_quantity, level = components_to_process.pop(0)
         data_output.progress +=1 
 
-        print(".. processing ...", part, quantity)
+        update_part_requirements(
+            part,
+            component_data,
+            additonal_requirements=extra_quantity
+        )
+
+        shortfall = component_data[part.pk]['shortfall']
+        required = component_data[part.pk]['required']
+
+        # Process any BOM items for this part
+        if shortfall > 0:
+            print(part.name, '->', 'shortfall:', shortfall, 'required:', required)
 
         # Update every 50 iterations
         if data_output.progress % 50 == 0:
             data_output.save()
 
-        continue
+        if shortfall <= 0:
+            # No shortfall for this part - skip processing any sub-components
+            continue
+
+        if part.assembly:
+            components = part.get_bom_items(include_virtual=False).filter(consumable=False).prefetch_related(
+                'sub_part'
+            )
+
+            for item in components:
+                sub_part = item.sub_part
+
+                # Calculate the quantity multiplier for this sub-part
+                required_qty = item.get_required_quantity(shortfall)
+
+                components_to_process.append((sub_part, required_qty, level + 1))
+                data_output.total += 1
+
+                print("-", level, "adding sub-part:", sub_part.name, "required qty:", required_qty)
+
 
         # TODO: Get the required BOM items for this part
 
-    # TODO: Attach the generated file to the data output
+    # Generate the output data file
+    headers = [
+        'Part ID',
+        'Part Name',
+        'Part IPN',
+        'Required Quantity',
+        'Available Stock',
+        'On Order',
+        'In Production',
+        'Shortfall',
+    ]
 
-    # Finally, ensure the data output is marked as complete
-    data_output.complete = True
-    data_output.save()
+    dataset = tablib.Dataset(headers=headers)
+
+    for _part_id, data in component_data.items():
+        row = [
+            data['part'].pk,
+            data['part'].name,
+            data['part'].IPN,
+            data['required'],
+            data['stock'],
+            data['on_order'],
+            data['in_production'],
+            data['shortfall'],
+        ]
+        dataset.append(row)
+
+    # Attach the generated file to the data output
+    datafile = dataset.export('csv')
+
+    data_output.mark_complete(
+        output=ContentFile(datafile, name='shortfall_report.csv')
+    )
