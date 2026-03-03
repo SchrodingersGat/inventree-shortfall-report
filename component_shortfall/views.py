@@ -83,5 +83,7 @@ class ShortfallReportView(CreateAPI):
             'output': data_output
         }
 
+        data_output.refresh_from_db()
+
         return Response(ShortfallReportSerializer(data).data)
 
