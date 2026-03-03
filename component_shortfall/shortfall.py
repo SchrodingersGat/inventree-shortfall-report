@@ -136,10 +136,6 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
         shortfall = component_data[part.pk]['shortfall']
         required = component_data[part.pk]['requirements']
 
-        # Process any BOM items for this part
-        if shortfall > 0:
-            print(part.name, '->', 'shortfall:', shortfall, 'required:', required)
-
         # Update every 50 iterations
         if data_output.progress % 50 == 0:
             data_output.save()
@@ -165,9 +161,6 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
 
                 print("-", level, "adding sub-part:", sub_part.name, "required qty:", required_qty)
 
-
-        # TODO: Get the required BOM items for this part
-
     # Generate the output data file
     headers = [
         'Part ID',
@@ -184,7 +177,7 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
 
     dataset = tablib.Dataset(headers=headers)
 
-    for _part_id, data in component_data.items():
+    for _, data in component_data.items():
         row = [
             data['part'].pk,
             data['part'].name,
