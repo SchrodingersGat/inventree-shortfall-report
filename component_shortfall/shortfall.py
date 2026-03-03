@@ -32,7 +32,7 @@ def get_subassemblies(part):
     ).filter(consumable=False)
 
 
-def update_part_requirements(part, component_data: dict, additonal_requirements=0, include_variants: bool = False):
+def update_part_requirements(part, level: int, component_data: dict, additonal_requirements=0, include_variants: bool = False):
     """Return requirements for the given part.
     
     Arguments:
@@ -60,18 +60,27 @@ def update_part_requirements(part, component_data: dict, additonal_requirements=
     requirements['allocated'] = requirements.get('allocated', part.allocation_count())
     requirements['building'] = requirements.get('building', part.quantity_being_built)
     requirements['in_production'] = requirements.get('in_production', part.quantity_in_production)
-    requirements['base_requirements'] = requirements.get('base_requirements', part.required_order_quantity())
+    
+    requirements['available'] = requirements['stock'] - requirements['allocated']
+
+    # Calculate latent requirements for this part
+    if level == 0:
+        requirements['base_requirements'] = requirements.get('base_requirements', part.required_order_quantity())
+    else:
+        # Ignore base requirements for sub-assemblies
+        requirements['base_requirements'] = 0
+    
 
     # Track the total "additional" requirements for this part (based on the parent assembly requirements)
     # The 'additional_requirements' may increase as we process more parent assemblies which require this part as a sub-component
     requirements['additional_requirements'] = requirements.get('additional_requirements', Decimal(0)) + Decimal(additonal_requirements)
 
-    requirements['required'] = requirements['base_requirements'] + requirements['additional_requirements']
+    requirements['requirements'] = requirements['base_requirements'] + requirements['additional_requirements']
 
     # Calculate the "shortfall" for the part
     requirements['shortfall'] = max(
         0,
-        requirements['required'] - requirements['stock'] - requirements['on_order'] - requirements['in_production']
+        requirements['requirements'] - requirements['available'] - requirements['on_order'] - requirements['in_production']
     )
 
     # Update the global dict of component data
@@ -119,12 +128,13 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
 
         update_part_requirements(
             part,
+            level,
             component_data,
             additonal_requirements=extra_quantity
         )
 
         shortfall = component_data[part.pk]['shortfall']
-        required = component_data[part.pk]['required']
+        required = component_data[part.pk]['requirements']
 
         # Process any BOM items for this part
         if shortfall > 0:
@@ -140,7 +150,8 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
 
         if part.assembly:
             components = part.get_bom_items(include_virtual=False).filter(consumable=False).prefetch_related(
-                'sub_part'
+                'sub_part',
+                'sub_part__category',
             )
 
             for item in components:
@@ -162,6 +173,8 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
         'Part ID',
         'Part Name',
         'Part IPN',
+        'Category ID',
+        'Category Name',
         'Required Quantity',
         'Available Stock',
         'On Order',
@@ -176,8 +189,10 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
             data['part'].pk,
             data['part'].name,
             data['part'].IPN,
-            data['required'],
-            data['stock'],
+            data['part'].category.pk if data['part'].category else None,
+            data['part'].category.pathstring if data['part'].category else None,
+            data['requirements'],
+            data['available'],
             data['on_order'],
             data['in_production'],
             data['shortfall'],
