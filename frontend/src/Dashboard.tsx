@@ -1,9 +1,12 @@
 // Import for type checking
 import {
+  apiUrl,
   checkPluginVersion,
+  monitorDataOutput,
   type InvenTreePluginContext
 } from '@inventreedb/ui';
-import { Button, SimpleGrid, Text } from '@mantine/core';
+import { Button, Stack, Text } from '@mantine/core';
+import { IconClipboardList } from '@tabler/icons-react';
 import { useState } from 'react';
 
 /**
@@ -16,19 +19,41 @@ function ComponentShortfallDashboardItem({
 }: {
   context: InvenTreePluginContext;
 }) {
-  const [counter, setCounter] = useState<number>(0);
 
-  const pluginName: string = 'ComponentShortfall';
+  const [ outputId, setOutputId ] = useState<number | undefined>(undefined);
 
-  // Render a simple grid of data
+  monitorDataOutput({
+    api: context.api,
+    queryClient: context.queryClient,
+    id: outputId,
+    title: 'Generating shortfall report'
+  });
+
+  const generateReport = context.forms.create({
+    title: 'Generate Shortfall Report',
+    url: apiUrl("/plugin/component-shortfall/shortfall/"),
+    fields: {
+      part: {},
+      category: {},
+      include_variants: {}
+    },
+    successMessage: null,
+    onFormSuccess: (response) => {
+      setOutputId(response.output?.pk);
+    }
+  })
+
   return (
-    <SimpleGrid cols={2} spacing='md'>
-      <Text>Plugin: {pluginName}</Text>
-      <Text>Username: {context.user?.username?.()}</Text>
-      <Text>Counter: {counter}</Text>
-      <Button onClick={() => setCounter(counter + 1)}>+</Button>
-    </SimpleGrid>
-  );
+    <>
+    {generateReport.modal}
+    <Stack gap='xs'>
+      <Text size='lg'>Generate Shortfall Report</Text>
+      <Button leftSection={<IconClipboardList />} onClick={() => generateReport.open()}>
+        Generate Report
+      </Button>
+    </Stack>
+    </>
+  )
 }
 
 // This is the function which is called by InvenTree to render the actual dashboard
