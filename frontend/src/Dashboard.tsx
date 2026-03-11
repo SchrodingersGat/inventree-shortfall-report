@@ -2,8 +2,8 @@
 import {
   apiUrl,
   checkPluginVersion,
-  monitorDataOutput,
-  type InvenTreePluginContext
+  type InvenTreePluginContext,
+  monitorDataOutput
 } from '@inventreedb/ui';
 import { Button, Stack, Text } from '@mantine/core';
 import { IconClipboardList } from '@tabler/icons-react';
@@ -19,8 +19,7 @@ function ComponentShortfallDashboardItem({
 }: {
   context: InvenTreePluginContext;
 }) {
-
-  const [ outputId, setOutputId ] = useState<number | undefined>(undefined);
+  const [outputId, setOutputId] = useState<number | undefined>(undefined);
 
   monitorDataOutput({
     api: context.api,
@@ -31,7 +30,7 @@ function ComponentShortfallDashboardItem({
 
   const generateReport = context.forms.create({
     title: 'Generate Shortfall Report',
-    url: apiUrl("/plugin/component-shortfall/shortfall/"),
+    url: apiUrl('/plugin/component-shortfall/shortfall/'),
     fields: {
       part: {},
       category: {},
@@ -41,19 +40,22 @@ function ComponentShortfallDashboardItem({
     onFormSuccess: (response) => {
       setOutputId(response.output?.pk);
     }
-  })
+  });
 
   return (
     <>
-    {generateReport.modal}
-    <Stack gap='xs'>
-      <Text size='lg'>Generate Shortfall Report</Text>
-      <Button leftSection={<IconClipboardList />} onClick={() => generateReport.open()}>
-        Generate Report
-      </Button>
-    </Stack>
+      {generateReport.modal}
+      <Stack gap='xs'>
+        <Text size='lg'>Generate Shortfall Report</Text>
+        <Button
+          leftSection={<IconClipboardList />}
+          onClick={() => generateReport.open()}
+        >
+          Generate Report
+        </Button>
+      </Stack>
     </>
-  )
+  );
 }
 
 // This is the function which is called by InvenTree to render the actual dashboard
