@@ -17,6 +17,8 @@ import tablib
 from django.core.files.base import ContentFile
 from django.db.models import F
 
+from InvenTree.helpers_model import construct_absolute_url
+
 import common.models as common_models
 import part.models as part_models
 
@@ -37,8 +39,6 @@ def update_part_requirements(
     Returns:
         The *additional* shortfall for this part (not cumulative)
     """
-
-    print(f"Adding {required_qty} of {part.name} (ID: {part.pk})")
 
     requirements = component_data.get(part.pk, None) or {}
 
@@ -240,12 +240,15 @@ def calculate_shortfall(
     dataset = tablib.Dataset(headers=headers)
 
     for _, data in requirements.items():
+        part = data["part"]
+        url = construct_absolute_url(part.get_absolute_url())
+
         row = [
-            data["part"].pk,
-            data["part"].name,
-            data["part"].IPN,
-            data["part"].category.pk if data["part"].category else None,
-            data["part"].category.pathstring if data["part"].category else None,
+            f'=HYPERLINK("{url}", "{part.pk}")',
+            part.name,
+            part.IPN,
+            part.category.pk if part.category else None,
+            part.category.pathstring if part.category else None,
             data["stock"],
             data["on_order"],
             data["required"],
@@ -254,6 +257,8 @@ def calculate_shortfall(
         dataset.append(row)
 
     # Attach the generated file to the data output
-    datafile = dataset.export("csv")
+    datafile = dataset.export("xlsx")
 
-    data_output.mark_complete(output=ContentFile(datafile, name="shortfall_report.csv"))
+    data_output.mark_complete(
+        output=ContentFile(datafile, name="shortfall_report.xlsx")
+    )
