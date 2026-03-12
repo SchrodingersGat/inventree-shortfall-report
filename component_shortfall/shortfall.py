@@ -139,6 +139,8 @@ def calculate_shortfall(
         category_id: The ID of the category to filter parts by (optional)
     """
 
+    logger.info("Generating component shortfall report")
+
     try:
         data_output = common_models.DataOutput.objects.get(pk=output_id)
     except common_models.DataOutput.DoesNotExist:

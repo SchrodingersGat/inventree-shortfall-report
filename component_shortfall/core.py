@@ -111,6 +111,8 @@ class ComponentShortfall(
         """
 
         import InvenTree.tasks
+        from common.models import DataOutput
+        from .shortfall import calculate_shortfall
 
         report_period = int(self.get_setting("SHORTFALL_REPORT_DAYS"))
 
@@ -122,8 +124,20 @@ class ComponentShortfall(
         ):
             return
 
-        # TODO: Actually run the report generation task here
-        print("OK I AM TOTALLY RUNNING THE SHORTFALL REPORT GENERATION TASK!!!")
+        # Run the report generation task here
+        data_output = DataOutput.objects.create(
+            user=None,
+            total=0,
+            progress=0,
+            output_type="shortfall_report",
+            plugin=self.SLUG,
+        )
+
+        # Calculate shortfall report with default settings
+        calculate_shortfall(data_output.pk)
+        data_output.refresh_from_db()
+
+        # TODO: Email the report to interested users?
 
         # Record success for the task
         InvenTree.tasks.record_task_success("component_shortfall_report")

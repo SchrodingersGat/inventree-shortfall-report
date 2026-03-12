@@ -33,11 +33,9 @@ class ShortfallReportView(CreateAPI):
 
         max_bom_depth = serializer.validated_data.get("max_bom_depth", 50)
 
-        part_id_list = []
-
         data_output = DataOutput.objects.create(
             user=request.user,
-            total=len(part_id_list),
+            total=0,
             progress=0,
             output_type="shortfall_report",
             plugin="component-shortfall",
@@ -53,8 +51,8 @@ class ShortfallReportView(CreateAPI):
             group="shortfall_report",
         )
 
-        data = {"category": category, "output": data_output}
-
         data_output.refresh_from_db()
+
+        data = {"category": category, "output": data_output}
 
         return Response(ShortfallReportSerializer(data).data)
