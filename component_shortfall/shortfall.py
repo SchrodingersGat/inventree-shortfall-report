@@ -70,7 +70,6 @@ def update_part_requirements(part, level: int, component_data: dict, additonal_r
         # Ignore base requirements for sub-assemblies
         requirements['base_requirements'] = 0
     
-
     # Track the total "additional" requirements for this part (based on the parent assembly requirements)
     # The 'additional_requirements' may increase as we process more parent assemblies which require this part as a sub-component
     requirements['additional_requirements'] = requirements.get('additional_requirements', Decimal(0)) + Decimal(additonal_requirements)
@@ -134,11 +133,7 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
         )
 
         shortfall = component_data[part.pk]['shortfall']
-        required = component_data[part.pk]['requirements']
-
-        # Process any BOM items for this part
-        if shortfall > 0:
-            print(part.name, '->', 'shortfall:', shortfall, 'required:', required)
+        # required = component_data[part.pk]['requirements']
 
         # Update every 50 iterations
         if data_output.progress % 50 == 0:
@@ -165,9 +160,6 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
 
                 print("-", level, "adding sub-part:", sub_part.name, "required qty:", required_qty)
 
-
-        # TODO: Get the required BOM items for this part
-
     # Generate the output data file
     headers = [
         'Part ID',
@@ -184,7 +176,7 @@ def calculate_shortfall(component_id_list: list[int], output_id: int):
 
     dataset = tablib.Dataset(headers=headers)
 
-    for _part_id, data in component_data.items():
+    for _, data in component_data.items():
         row = [
             data['part'].pk,
             data['part'].name,
