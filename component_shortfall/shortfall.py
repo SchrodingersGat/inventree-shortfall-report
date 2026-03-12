@@ -24,12 +24,6 @@ import part.models as part_models
 logger = structlog.get_logger("inventree.shortfall")
 
 
-def get_subassemblies(part):
-    """Return a list of subassemblies for the provided part."""
-
-    return part.get_bom_items(include_virtual=False).filter(consumable=False)
-
-
 def update_part_requirements(
     part, required_qty: Decimal, component_data: dict
 ) -> Decimal:
@@ -54,6 +48,8 @@ def update_part_requirements(
     # Fetch (or calculate) the various stock values for this part
     if "stock" not in requirements:
         requirements["stock"] = part.get_stock_count(include_variants=False)
+
+    # TODO: What about BOM items which allow variants???
 
     if "on_order" not in requirements:
         requirements["on_order"] = part.on_order
@@ -206,10 +202,6 @@ def calculate_shortfall(
 
         # Prevent deep recursion into the BOM - if we have reached the maximum level, then we will not process any sub-components
         if level >= max_bom_depth:
-            continue
-
-        if shortfall <= 0:
-            # No shortfall for this part - skip processing any sub-components
             continue
 
         # Is this an assembly?
