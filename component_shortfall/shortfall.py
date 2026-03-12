@@ -155,8 +155,8 @@ def calculate_shortfall(output_id: int, category_id: Optional[int] = None):
             category = part_models.PartCategory.objects.get(pk=category_id)
         else:
             category = None
-    except part_models.PartCategory.DoesNotExist:
-        logger.error(
+    except (ValueError, part_models.PartCategory.DoesNotExist):
+        logger.warning(
             f"component_shortfall: PartCategory with ID {category_id} does not exist - cannot filter parts"
         )
         category = None
@@ -206,7 +206,7 @@ def calculate_shortfall(output_id: int, category_id: Optional[int] = None):
         # Prevent deep recursion into the BOM - if we have reached the maximum level, then we will not process any sub-components
         if level >= MAX_BOM_LEVEL:
             logger.warning(
-                f"- reached maximum BOM level for part: {part.name} (ID: {part.pk}), skipping sub-components..."
+                f"component_shortfall: reached maximum BOM level for part: {part.name} (ID: {part.pk})"
             )
             continue
 
@@ -224,8 +224,6 @@ def calculate_shortfall(output_id: int, category_id: Optional[int] = None):
                     "sub_part__category",
                 )
             )
-
-            # TODO: Exclude parts which are not in the specified category (if provided)
 
             for item in components:
                 sub_part = item.sub_part
