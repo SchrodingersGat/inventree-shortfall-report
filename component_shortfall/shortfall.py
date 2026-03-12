@@ -130,13 +130,23 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
 
 def calculate_shortfall(
     output_id: int, category_id: Optional[int] = None, max_bom_depth: int = 50
-):
+) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
     Arguments:
         output_id: The ID of the DataOutput (where to save the results)
         max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
         category_id: The ID of the category to filter parts by (optional)
+
+    Returns:
+        A dict of part requirements, with the part ID as the key.
+
+        Each element in the dict has the follow values:
+        - part: The part object
+        - required: The required quantity of the part (for sales order and build orders)
+        - stock: The current stock on hand for this part
+        - on_order: The quantity of this part currently on order
+        - shortfall: The calculated shortfall for this part (required - stock - on_order)
     """
 
     logger.info("Generating component shortfall report")
@@ -264,3 +274,5 @@ def calculate_shortfall(
     data_output.mark_complete(
         output=ContentFile(datafile, name="shortfall_report.xlsx")
     )
+
+    return requirements
