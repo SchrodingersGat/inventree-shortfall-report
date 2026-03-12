@@ -11,7 +11,6 @@ from InvenTree.mixins import CreateAPI
 from InvenTree.tasks import offload_task
 
 from common.models import DataOutput
-import part.models as part_models
 from .serializers import ShortfallReportSerializer
 from .shortfall import calculate_shortfall
 
@@ -32,14 +31,16 @@ class ShortfallReportView(CreateAPI):
         # Extract validated data
         category = serializer.validated_data.get("category", None)
 
+        max_bom_depth = serializer.validated_data.get("max_bom_depth", 50)
+
         part_id_list = []
 
         data_output = DataOutput.objects.create(
             user=request.user,
             total=len(part_id_list),
             progress=0,
-            output_type='shortfall_report',
-            plugin='component-shortfall'
+            output_type="shortfall_report",
+            plugin="component-shortfall",
         )
 
         # This report may be expensive to calculate
@@ -48,15 +49,12 @@ class ShortfallReportView(CreateAPI):
             calculate_shortfall,
             data_output.pk,
             category_id=category.pk if category else None,
-            group='shortfall_report',
+            max_bom_depth=max_bom_depth,
+            group="shortfall_report",
         )
 
-        data = {
-            'category': category,
-            'output': data_output
-        }
+        data = {"category": category, "output": data_output}
 
         data_output.refresh_from_db()
 
         return Response(ShortfallReportSerializer(data).data)
-

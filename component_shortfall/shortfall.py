@@ -132,15 +132,16 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
     return outstanding_parts
 
 
-def calculate_shortfall(output_id: int, category_id: Optional[int] = None):
+def calculate_shortfall(
+    output_id: int, category_id: Optional[int] = None, max_bom_depth: int = 50
+):
     """Calculate the component shortfall for a given list of component IDs.
 
     Arguments:
         output_id: The ID of the DataOutput (where to save the results)
+        max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
         category_id: The ID of the category to filter parts by (optional)
     """
-
-    MAX_BOM_LEVEL: int = 50
 
     try:
         data_output = common_models.DataOutput.objects.get(pk=output_id)
@@ -204,10 +205,7 @@ def calculate_shortfall(output_id: int, category_id: Optional[int] = None):
             continue
 
         # Prevent deep recursion into the BOM - if we have reached the maximum level, then we will not process any sub-components
-        if level >= MAX_BOM_LEVEL:
-            logger.warning(
-                f"component_shortfall: reached maximum BOM level for part: {part.name} (ID: {part.pk})"
-            )
+        if level >= max_bom_depth:
             continue
 
         if shortfall <= 0:

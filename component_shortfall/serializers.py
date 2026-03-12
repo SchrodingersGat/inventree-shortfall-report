@@ -29,6 +29,15 @@ class ShortfallReportSerializer(serializers.Serializer):
         allow_null=True,
     )
 
+    max_bom_depth = serializers.IntegerField(
+        required=False,
+        default=50,
+        min_value=0,
+        max_value=50,
+        label=_("Maximum BOM Depth"),
+        help_text=_("The maximum depth to traverse the BOM when calculating shortfall"),
+    )
+
     def validate(self, data):
         """Validate the provided data."""
 
