@@ -15,15 +15,6 @@ import part.models as part_models
 class ShortfallReportSerializer(serializers.Serializer):
     """Serializer for shortfall report request parameters."""
 
-    part = serializers.PrimaryKeyRelatedField(
-        queryset=part_models.Part.objects.all(),
-        many=False,
-        required=False,
-        allow_null=True,
-        label=_("Part"),
-        help_text=_("The part for which to retrieve shortfall data"),
-    )
-
     category = serializers.PrimaryKeyRelatedField(
         queryset=part_models.PartCategory.objects.all(),
         many=False,
@@ -31,13 +22,6 @@ class ShortfallReportSerializer(serializers.Serializer):
         allow_null=True,
         label=_("Category"),
         help_text=_("The category for which to retrieve shortfall data"),
-    )
-
-    include_variants = serializers.BooleanField(
-        required=False,
-        default=True,
-        label=_('Include Variants'),
-        help_text=_('Whether to include part variants in the shortfall report'),
     )
 
     output = common.serializers.DataOutputSerializer(
@@ -48,10 +32,6 @@ class ShortfallReportSerializer(serializers.Serializer):
     def validate(self, data):
         """Validate the provided data."""
 
-        if not data.get('part') and not data.get('category'):
-            raise serializers.ValidationError(_("Either 'part' or 'category' must be provided"))
-
-        if data.get('part') and data.get('category'):
-            raise serializers.ValidationError(_("Only one of 'part' or 'category' can be provided"))
+        # TODO: Any custom data validation goes here
 
         return data

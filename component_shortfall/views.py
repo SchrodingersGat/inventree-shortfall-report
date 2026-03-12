@@ -30,34 +30,9 @@ class ShortfallReportView(CreateAPI):
         serializer.is_valid(raise_exception=True)
 
         # Extract validated data
-        part = serializer.validated_data.get("part", None)
         category = serializer.validated_data.get("category", None)
 
-        include_variants = serializer.validated_data["include_variants"]
-
         part_id_list = []
-
-        # Extract the top-level parts that we are interested in
-
-        if part:
-            if include_variants:
-                # Find all active assembly variants of the specified part
-                part_id_list = [
-                    p.pk for p in part.get_descendants(include_self=True)
-                    if p.active
-                ]
-            else:
-                part_id_list = [part.pk]
-        elif category:
-            # Find all child categories
-            categories = category.get_descendants(include_self=True)
-            
-            # Find all active parts within the provided category
-            part_id_list = [
-                p.pk for p in part_models.Part.objects.filter(
-                category__in=categories, active=True
-                )
-            ]
 
         data_output = DataOutput.objects.create(
             user=request.user,
@@ -71,15 +46,13 @@ class ShortfallReportView(CreateAPI):
         # Offload to the background worker process
         offload_task(
             calculate_shortfall,
-            component_id_list=part_id_list,
-            output_id=data_output.pk,
+            data_output.pk,
+            category_id=category.pk if category else None,
             group='shortfall_report',
         )
 
         data = {
-            'part': part,
             'category': category,
-            'include_variants': include_variants,
             'output': data_output
         }
 
