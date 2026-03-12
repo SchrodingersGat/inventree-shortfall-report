@@ -32,9 +32,8 @@ function ComponentShortfallDashboardItem({
     title: 'Generate Shortfall Report',
     url: apiUrl('/plugin/component-shortfall/shortfall/'),
     fields: {
-      part: {},
       category: {},
-      include_variants: {}
+      max_bom_depth: {}
     },
     successMessage: null,
     onFormSuccess: (response) => {

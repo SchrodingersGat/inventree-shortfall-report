@@ -11,7 +11,6 @@ from InvenTree.mixins import CreateAPI
 from InvenTree.tasks import offload_task
 
 from common.models import DataOutput
-import part.models as part_models
 from .serializers import ShortfallReportSerializer
 from .shortfall import calculate_shortfall
 
@@ -30,60 +29,32 @@ class ShortfallReportView(CreateAPI):
         serializer.is_valid(raise_exception=True)
 
         # Extract validated data
-        part = serializer.validated_data.get("part", None)
         category = serializer.validated_data.get("category", None)
 
-        include_variants = serializer.validated_data["include_variants"]
+        max_bom_depth = serializer.validated_data.get("max_bom_depth", 50)
 
         part_id_list = []
-
-        # Extract the top-level parts that we are interested in
-
-        if part:
-            if include_variants:
-                # Find all active assembly variants of the specified part
-                part_id_list = [
-                    p.pk for p in part.get_descendants(include_self=True)
-                    if p.active
-                ]
-            else:
-                part_id_list = [part.pk]
-        elif category:
-            # Find all child categories
-            categories = category.get_descendants(include_self=True)
-            
-            # Find all active parts within the provided category
-            part_id_list = [
-                p.pk for p in part_models.Part.objects.filter(
-                category__in=categories, active=True
-                )
-            ]
 
         data_output = DataOutput.objects.create(
             user=request.user,
             total=len(part_id_list),
             progress=0,
-            output_type='shortfall_report',
-            plugin='component-shortfall'
+            output_type="shortfall_report",
+            plugin="component-shortfall",
         )
 
         # This report may be expensive to calculate
         # Offload to the background worker process
         offload_task(
             calculate_shortfall,
-            component_id_list=part_id_list,
-            output_id=data_output.pk,
-            group='shortfall_report',
+            data_output.pk,
+            category_id=category.pk if category else None,
+            max_bom_depth=max_bom_depth,
+            group="shortfall_report",
         )
 
-        data = {
-            'part': part,
-            'category': category,
-            'include_variants': include_variants,
-            'output': data_output
-        }
+        data = {"category": category, "output": data_output}
 
         data_output.refresh_from_db()
 
         return Response(ShortfallReportSerializer(data).data)
-
