@@ -47,6 +47,11 @@ class ComponentShortfall(
             "default": 7,
             "validator": int,
         },
+        "SHORTFALL_REPORT_GROUP": {
+            "name": "Shortfall Report Group",
+            "description": "User group to send periodic shortfall reports",
+            "model": "auth.group",
+        },
     }
 
     # Custom URL endpoints (from UrlsMixin)
@@ -113,6 +118,7 @@ class ComponentShortfall(
         import InvenTree.tasks
         from common.models import DataOutput
         from .shortfall import calculate_shortfall
+        from django.contrib.auth.models import Group
 
         report_period = int(self.get_setting("SHORTFALL_REPORT_DAYS"))
 
@@ -137,7 +143,19 @@ class ComponentShortfall(
         calculate_shortfall(data_output.pk)
         data_output.refresh_from_db()
 
-        # TODO: Email the report to interested users?
+        # Email the report to interested users?
+        report_group_id = self.get_setting("SHORTFALL_REPORT_GROUP")
+
+        users = []
+
+        try:
+            group = Group.objects.get(pk=report_group_id)
+            users = group.user_set.filter(is_active=True)
+        except Group.DoesNotExist:
+            pass
+
+        # TODO: Send email to users, with the report attached
+        print("USERS:", users)
 
         # Record success for the task
         InvenTree.tasks.record_task_success("component_shortfall_report")
