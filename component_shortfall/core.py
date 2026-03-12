@@ -2,12 +2,14 @@
 
 from plugin import InvenTreePlugin
 
-from plugin.mixins import SettingsMixin, UrlsMixin, UserInterfaceMixin
+from plugin.mixins import ScheduleMixin, SettingsMixin, UrlsMixin, UserInterfaceMixin
 
 from . import PLUGIN_VERSION
 
 
-class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTreePlugin):
+class ComponentShortfall(
+    ScheduleMixin, SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTreePlugin
+):
     """ComponentShortfall - custom InvenTree plugin."""
 
     # Plugin metadata
@@ -26,6 +28,10 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
     # MIN_VERSION = '0.18.0'
     # MAX_VERSION = '2.0.0'
 
+    SCHEDULED_TASKS = {
+        "shortfall_report": {"func": "periodic_shortfall_report", "schedule": "D"}
+    }
+
     # Plugin settings (from SettingsMixin)
     # Ref: https://docs.inventree.org/en/latest/plugins/mixins/settings/
     SETTINGS = {
@@ -34,7 +40,13 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
             "description": "Hide results for parts which have no shortfall",
             "default": False,
             "validator": bool,
-        }
+        },
+        "SHORTFALL_REPORT_DAYS": {
+            "name": "Shortfall Report Days",
+            "description": "Number of days between automatic shortfall report generation (set to 0 to disable)",
+            "default": 7,
+            "validator": int,
+        },
     }
 
     # Custom URL endpoints (from UrlsMixin)
@@ -91,3 +103,27 @@ class ComponentShortfall(SettingsMixin, UrlsMixin, UserInterfaceMixin, InvenTree
                 ),
             }
         ]
+
+    def periodic_shortfall_report(self):
+        """Scheduled task to periodically generate a shortfall report.
+
+        This task is called daily, but uses the SHORTFALL_REPORT_DAYS setting to determine how often to actually generate the report.
+        """
+
+        import InvenTree.tasks
+
+        report_period = int(self.get_setting("SHORTFALL_REPORT_DAYS"))
+
+        if report_period <= 0:
+            return
+
+        if not InvenTree.tasks.check_daily_holdoff(
+            "component_shortfall_report", report_period
+        ):
+            return
+
+        # TODO: Actually run the report generation task here
+        print("OK I AM TOTALLY RUNNING THE SHORTFALL REPORT GENERATION TASK!!!")
+
+        # Record success for the task
+        InvenTree.tasks.record_task_success("component_shortfall_report")
