@@ -153,9 +153,10 @@ class ComponentShortfall(
         users = []
 
         try:
-            group = Group.objects.get(pk=report_group_id)
-            users = group.user_set.filter(is_active=True)
-        except Group.DoesNotExist:
+            if report_group_id:
+                group = Group.objects.get(pk=report_group_id)
+                users = group.user_set.filter(is_active=True)
+        except (ValueError, Group.DoesNotExist):
             pass
 
         recipients = []
