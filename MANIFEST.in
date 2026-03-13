@@ -1,1 +1,2 @@
 recursive-include component_shortfall/static *
+recursive-include component_shortfall/templates *

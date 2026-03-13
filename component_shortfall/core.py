@@ -38,7 +38,7 @@ class ComponentShortfall(
         "HIDE_NO_SHORTFALL": {
             "name": "Hide No Shortfall",
             "description": "Hide results for parts which have no shortfall",
-            "default": False,
+            "default": True,
             "validator": bool,
         },
         "SHORTFALL_REPORT_DAYS": {
@@ -115,9 +115,10 @@ class ComponentShortfall(
         This task is called daily, but uses the SHORTFALL_REPORT_DAYS setting to determine how often to actually generate the report.
         """
 
+        import InvenTree.helpers_email
         import InvenTree.tasks
         from common.models import DataOutput
-        from .shortfall import calculate_shortfall
+        from .shortfall import calculate_shortfall, format_shortfall_report_html
         from django.contrib.auth.models import Group
 
         report_period = int(self.get_setting("SHORTFALL_REPORT_DAYS"))
@@ -139,8 +140,11 @@ class ComponentShortfall(
             plugin=self.SLUG,
         )
 
+        hide_no_shortfall = self.get_setting("HIDE_NO_SHORTFALL")
+
         # Calculate shortfall report with default settings
-        calculate_shortfall(data_output.pk)
+        requirements = calculate_shortfall(data_output.pk)
+
         data_output.refresh_from_db()
 
         # Email the report to interested users?
@@ -154,8 +158,26 @@ class ComponentShortfall(
         except Group.DoesNotExist:
             pass
 
-        # TODO: Send email to users, with the report attached
-        print("USERS:", users)
+        recipients = []
+
+        for user in users:
+            if email := InvenTree.helpers_email.get_email_for_user(user):
+                if email not in recipients:
+                    recipients.append(email)
+
+        # Construct the email body
+        body = format_shortfall_report_html(
+            requirements, data_output, hide_no_shortfall=hide_no_shortfall
+        )
+
+        # Send email to users, with the report attached
+        if recipients:
+            InvenTree.helpers_email.send_email(
+                subject="[InvenTree] Component Shortfall Report",
+                body="Please find the attached component shortfall report.",
+                html_message=body,
+                recipients=recipients,
+            )
 
         # Record success for the task
         InvenTree.tasks.record_task_success("component_shortfall_report")

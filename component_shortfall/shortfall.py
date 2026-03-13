@@ -11,6 +11,7 @@ Process Goals:
 
 from typing import Optional
 from decimal import Decimal
+import os
 import structlog
 import tablib
 
@@ -276,3 +277,48 @@ def calculate_shortfall(
     )
 
     return requirements
+
+
+def format_shortfall_report_html(
+    requirements: dict, output: common_models.DataOutput, hide_no_shortfall: bool = True
+) -> str:
+    """Format the shortfall report as a HTML document."""
+
+    from django.template import Template, Context
+
+    file_path = os.path.join(
+        os.path.dirname(__file__),
+        "templates",
+        "component_shortfall",
+        "shortfall_email.html",
+    )
+
+    with open(file_path, "r") as f:
+        template_content = f.read()
+
+    context_data = {}
+
+    # Add download link
+    if output and output.output:
+        context_data["download_url"] = construct_absolute_url(output.output.url)
+
+    # Add all the requirements entries
+    requirements_list = []
+
+    for entry in requirements.values():
+        if hide_no_shortfall and entry.get("shortfall", 0) <= 0:
+            continue
+
+        requirements_list.append({
+            **entry,
+            "part_url": construct_absolute_url(entry["part"].get_absolute_url()),
+        })
+
+    context_data["requirements"] = requirements_list
+
+    template = Template(template_content)
+    context = Context(context_data)
+
+    data = template.render(context)
+
+    return data
