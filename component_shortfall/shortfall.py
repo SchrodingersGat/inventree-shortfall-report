@@ -11,6 +11,7 @@ Process Goals:
 
 from typing import Optional
 from decimal import Decimal
+import os
 import structlog
 import tablib
 
@@ -130,14 +131,26 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
 
 def calculate_shortfall(
     output_id: int, category_id: Optional[int] = None, max_bom_depth: int = 50
-):
+) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
     Arguments:
         output_id: The ID of the DataOutput (where to save the results)
         max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
         category_id: The ID of the category to filter parts by (optional)
+
+    Returns:
+        A dict of part requirements, with the part ID as the key.
+
+        Each element in the dict has the follow values:
+        - part: The part object
+        - required: The required quantity of the part (for sales order and build orders)
+        - stock: The current stock on hand for this part
+        - on_order: The quantity of this part currently on order
+        - shortfall: The calculated shortfall for this part (required - stock - on_order)
     """
+
+    logger.info("Generating component shortfall report")
 
     try:
         data_output = common_models.DataOutput.objects.get(pk=output_id)
@@ -262,3 +275,50 @@ def calculate_shortfall(
     data_output.mark_complete(
         output=ContentFile(datafile, name="shortfall_report.xlsx")
     )
+
+    return requirements
+
+
+def format_shortfall_report_html(
+    requirements: dict, output: common_models.DataOutput, hide_no_shortfall: bool = True
+) -> str:
+    """Format the shortfall report as a HTML document."""
+
+    from django.template import Template, Context
+
+    file_path = os.path.join(
+        os.path.dirname(__file__),
+        "templates",
+        "component_shortfall",
+        "shortfall_email.html",
+    )
+
+    with open(file_path, "r") as f:
+        template_content = f.read()
+
+    context_data = {}
+
+    # Add download link
+    if output and output.output:
+        context_data["download_url"] = construct_absolute_url(output.output.url)
+
+    # Add all the requirements entries
+    requirements_list = []
+
+    for entry in requirements.values():
+        if hide_no_shortfall and entry.get("shortfall", 0) <= 0:
+            continue
+
+        requirements_list.append({
+            **entry,
+            "part_url": construct_absolute_url(entry["part"].get_absolute_url()),
+        })
+
+    context_data["requirements"] = requirements_list
+
+    template = Template(template_content)
+    context = Context(context_data)
+
+    data = template.render(context)
+
+    return data
