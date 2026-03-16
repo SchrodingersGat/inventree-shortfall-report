@@ -24,7 +24,7 @@ import common.models as common_models
 import part.models as part_models
 
 
-logger = structlog.get_logger("inventree.shortfall")
+logger = structlog.get_logger("inventree.shortfall_report")
 
 
 def update_part_requirements(
@@ -300,7 +300,7 @@ def format_shortfall_report_html(
 
     # Add download link
     if output and output.output:
-        context_data["download_url"] = construct_absolute_url(output.output.url)
+        context_data["download_link"] = construct_absolute_url(output.output.url)
 
     # Add all the requirements entries
     requirements_list = []
