@@ -248,6 +248,7 @@ def calculate_shortfall(
         "On Order",
         "Required Quantity",
         "Shortfall",
+        "Units",
     ]
 
     dataset = tablib.Dataset(headers=headers)
@@ -266,6 +267,7 @@ def calculate_shortfall(
             data["on_order"],
             data["required"],
             data["shortfall"],
+            part.units,
         ]
         dataset.append(row)
 
