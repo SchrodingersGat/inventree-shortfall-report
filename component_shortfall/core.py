@@ -1,10 +1,15 @@
 """Generate component shortfall reports"""
 
+import structlog
+
 from plugin import InvenTreePlugin
 
 from plugin.mixins import ScheduleMixin, SettingsMixin, UrlsMixin, UserInterfaceMixin
 
 from . import PLUGIN_VERSION
+
+
+logger = structlog.get_logger("inventree.shortfall_report")
 
 
 class ComponentShortfall(
@@ -124,11 +129,15 @@ class ComponentShortfall(
         report_period = int(self.get_setting("SHORTFALL_REPORT_DAYS"))
 
         if report_period <= 0:
+            logger.info(
+                "Shortfall report generation is disabled (SHORTFALL_REPORT_DAYS <= 0)"
+            )
             return
 
         if not InvenTree.tasks.check_daily_holdoff(
             "component_shortfall_report", report_period
         ):
+            logger.info("Shortfall report generation skipped due to holdoff period")
             return
 
         # Run the report generation task here
