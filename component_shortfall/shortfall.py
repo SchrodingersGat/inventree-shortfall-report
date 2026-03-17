@@ -210,9 +210,6 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
     add_part_info(so_parts)
     add_part_info(bo_parts)
 
-    print("Sales Order Requirements:", len(so_parts))
-    print("Build Order Requirements:", len(bo_parts))
-
     return outstanding_parts
 
 
