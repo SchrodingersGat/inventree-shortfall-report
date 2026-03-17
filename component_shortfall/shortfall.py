@@ -51,9 +51,15 @@ def update_part_requirements(
         requirements["stock"] = part.get_stock_count(include_variants=False)
 
     # TODO: What about BOM items which allow variants???
+    # TODO: What about BOM substitutes?
 
+    # Calculate the total "on order" quantity for this part
     if "on_order" not in requirements:
         requirements["on_order"] = part.on_order
+
+    # Calculate the total "in production" quantity for this part
+    if "in_production" not in requirements:
+        requirements["in_production"] = part.quantity_being_built
 
     # Add in the additional requirements
     requirements["required"] = requirements.get("required", Decimal(0)) + Decimal(
@@ -66,7 +72,7 @@ def update_part_requirements(
 
     # Calculate the "shortfall" for this part
     requirements["shortfall"] = max(
-        0, requirements["required"] - requirements["stock"] - requirements["on_order"]
+        0, requirements["required"] - requirements["stock"] - requirements["on_order"] - requirements["in_production"]
     )
 
     # Update the global dict of component data
