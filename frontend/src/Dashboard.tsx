@@ -43,37 +43,14 @@ function ComponentShortfallDashboardItem({
     }
   });
 
-  const [importOpened, setImportOpened] = useState<boolean>(false);
-
-  const [selectedSession, setSelectedSession] = useState<number | undefined>(
-    undefined
-  );
-
-  const fields: ApiFormFieldSet = {
-    data_file: {},
-    model_type: {},
-    update_records: {},
-  };
-
-  const importData = context.forms.create({
-    title: 'Import Data',
-    url: ApiEndpoints.import_session_list,
-    fields: fields,
-    onFormSuccess: (response: any) => {
-      setSelectedSession(response.pk);
-      setImportOpened(true);
-    }
-  });
-
   return (
     <>
-      {importData.modal}
       {generateReport.modal}
       <Stack gap='xs'>
         <Text size='lg'>Generate Shortfall Report</Text>
         <Button
           leftSection={<IconClipboardList />}
-          onClick={() => importData.open()}
+          onClick={() => generateReport.open()}
         >
           Generate Report
         </Button>
