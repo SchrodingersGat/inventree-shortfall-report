@@ -1,9 +1,11 @@
 // Import for type checking
 import {
+  ApiEndpoints,
+  ApiFormFieldSet,
   apiUrl,
   checkPluginVersion,
   type InvenTreePluginContext,
-  monitorDataOutput
+  useMonitorDataOutput
 } from '@inventreedb/ui';
 import { Button, Stack, Text } from '@mantine/core';
 import { IconClipboardList } from '@tabler/icons-react';
@@ -21,7 +23,7 @@ function ComponentShortfallDashboardItem({
 }) {
   const [outputId, setOutputId] = useState<number | undefined>(undefined);
 
-  monitorDataOutput({
+  useMonitorDataOutput({
     api: context.api,
     queryClient: context.queryClient,
     id: outputId,
@@ -41,14 +43,47 @@ function ComponentShortfallDashboardItem({
     }
   });
 
+  const [importOpened, setImportOpened] = useState<boolean>(false);
+
+  const [selectedSession, setSelectedSession] = useState<number | undefined>(
+    undefined
+  );
+
+  const fields: ApiFormFieldSet = {
+    data_file: {},
+    model_type: {},
+    update_records: {},
+  };
+
+  const importData = context.forms.create({
+    title: 'Import Data',
+    url: ApiEndpoints.import_session_list,
+    fields: fields,
+    onFormSuccess: (response: any) => {
+      setSelectedSession(response.pk);
+      setImportOpened(true);
+    }
+  });
+
+  const wizard = (context as any).wizards.importData({
+    sessionId: selectedSession,
+    opened: importOpened,
+    onClose: () => {
+      setSelectedSession(undefined);
+      setImportOpened(false);
+    }
+  });
+
   return (
     <>
+      {importData.modal}
       {generateReport.modal}
+      {wizard.wizard}
       <Stack gap='xs'>
         <Text size='lg'>Generate Shortfall Report</Text>
         <Button
           leftSection={<IconClipboardList />}
-          onClick={() => generateReport.open()}
+          onClick={() => importData.open()}
         >
           Generate Report
         </Button>
@@ -63,5 +98,9 @@ export function renderComponentShortfallDashboardItem(
   context: InvenTreePluginContext
 ) {
   checkPluginVersion(context);
+
+  console.log("context:");
+  console.log(context);
+
   return <ComponentShortfallDashboardItem context={context} />;
 }

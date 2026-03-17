@@ -130,12 +130,14 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
 
 
 def calculate_shortfall(
-    output_id: int, category_id: Optional[int] = None, max_bom_depth: int = 50
+    output_id: int, category_id: Optional[int] = None, include_sales_orders: bool = True, include_build_orders: bool = True, max_bom_depth: int = 50
 ) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
     Arguments:
         output_id: The ID of the DataOutput (where to save the results)
+        include_sales_orders: Whether to include sales order requirements in the calculation (default: True)
+        include_build_orders: Whether to include build order requirements in the calculation (default: True)
         max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
         category_id: The ID of the category to filter parts by (optional)
 
