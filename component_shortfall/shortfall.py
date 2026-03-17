@@ -51,9 +51,15 @@ def update_part_requirements(
         requirements["stock"] = part.get_stock_count(include_variants=False)
 
     # TODO: What about BOM items which allow variants???
+    # TODO: What about BOM substitutes?
 
+    # Calculate the total "on order" quantity for this part
     if "on_order" not in requirements:
         requirements["on_order"] = part.on_order
+
+    # Calculate the total "in production" quantity for this part
+    if "in_production" not in requirements:
+        requirements["in_production"] = part.quantity_being_built
 
     # Add in the additional requirements
     requirements["required"] = requirements.get("required", Decimal(0)) + Decimal(
@@ -66,7 +72,7 @@ def update_part_requirements(
 
     # Calculate the "shortfall" for this part
     requirements["shortfall"] = max(
-        0, requirements["required"] - requirements["stock"] - requirements["on_order"]
+        0, requirements["required"] - requirements["stock"] - requirements["on_order"] - requirements["in_production"]
     )
 
     # Update the global dict of component data
@@ -76,7 +82,7 @@ def update_part_requirements(
     return requirements["shortfall"] - initial_shortfall
 
 
-def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -> dict:
+def get_outstanding_sales_order_parts(category: Optional[part_models.PartCategory] = None) -> dict:
     """Return a dict of outstanding parts (based on open sales orders).
 
     Returns a dict of part requirements, with the part ID as the key.
@@ -113,9 +119,9 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
     outstanding_parts = {}
 
     for line in sales_order_lines:
-        defecit = max(0, line.quantity - line.shipped)
+        deficit = max(0, line.quantity - line.shipped)
 
-        if defecit <= 0:
+        if deficit <= 0:
             # No outstanding quantity for this line item
             continue
 
@@ -123,8 +129,86 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
             "part": line.part,
             "required": Decimal(0),
         }
-        part_data["required"] += line.quantity - line.shipped
+        part_data["required"] += deficit
         outstanding_parts[line.part.pk] = part_data
+
+    return outstanding_parts
+
+
+def get_outstanding_build_order_parts(category: Optional[part_models.PartCategory] = None) -> dict:
+    """Return a dict of outstanding parts (based on open build orders).
+
+    Returns a dict of part requirements, with the part ID as the key.
+
+    Each element in the dict has the follow values:
+    - part: The part object
+    - required: The required quantity of the part (for sales order and build orders)
+
+    Arguments:
+        - category: Optional category to filter the parts by
+    """
+
+    from build.models import BuildLine
+    from build.status_codes import BuildStatusGroups
+
+    # Find all open build order line items which are not completed
+    # Here we are interested in the "deficit" quantity for each line item
+    # i.e. the quantity which is still required to complete the build order
+    # We must take into account the quantity already consumed against this line item
+    build_order_lines = BuildLine.objects.filter(
+        build__status__in=BuildStatusGroups.ACTIVE_CODES,
+        build__part__virtual=False,
+        consumed__lt=F("quantity"),
+    ).prefetch_related(
+        "bom_item__sub_part",
+    )
+
+    # Filter by part category (e.g. only include orders for parts within a certain category)
+    if category:
+        categories = category.get_descendants(include_self=True)
+        build_order_lines = build_order_lines.filter(
+            build__part__category__in=categories
+        )
+
+    outstanding_parts = {}
+
+    for line in build_order_lines:
+        deficit = max(0, line.quantity - line.consumed)
+
+        if deficit <= 0:
+            # No outstanding quantity for this line item
+            continue
+
+        part = line.bom_item.sub_part
+
+        part_data = outstanding_parts.get(part.pk, None) or {
+            "part": part,
+            "required": Decimal(0),
+        }
+        part_data["required"] += deficit
+        outstanding_parts[part.pk] = part_data
+
+    return outstanding_parts
+
+
+def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -> dict:
+    """Return a dict of outstanding parts (based on open sales orders and build orders)."""
+
+    # Start with the outstanding sales order parts
+    outstanding_parts = {}
+    
+    so_parts = get_outstanding_sales_order_parts(category=category)
+    bo_parts = get_outstanding_build_order_parts(category=category)
+
+    def add_part_info(parts):
+        for part_id, part_data in parts.items():
+            if part_id in outstanding_parts:
+                outstanding_parts[part_id]["required"] += part_data["required"]
+            else:
+                outstanding_parts[part_id] = part_data
+
+    add_part_info(so_parts)
+    add_part_info(bo_parts)
 
     return outstanding_parts
 
@@ -246,6 +330,7 @@ def calculate_shortfall(
         "Category Name",
         "Current Stock",
         "On Order",
+        "In Production",
         "Required Quantity",
         "Shortfall",
         "Units",
@@ -263,10 +348,11 @@ def calculate_shortfall(
             part.IPN,
             part.category.pk if part.category else None,
             part.category.pathstring if part.category else None,
-            data["stock"],
-            data["on_order"],
-            data["required"],
-            data["shortfall"],
+            Decimal(data["stock"]),
+            Decimal(data["on_order"]),
+            Decimal(data["in_production"]),
+            Decimal(data["required"]),
+            Decimal(data["shortfall"]),
             part.units,
         ]
         dataset.append(row)

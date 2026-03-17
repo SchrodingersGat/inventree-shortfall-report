@@ -3,7 +3,7 @@ import {
   apiUrl,
   checkPluginVersion,
   type InvenTreePluginContext,
-  monitorDataOutput
+  useMonitorDataOutput
 } from '@inventreedb/ui';
 import { Button, Stack, Text } from '@mantine/core';
 import { IconClipboardList } from '@tabler/icons-react';
@@ -21,7 +21,7 @@ function ComponentShortfallDashboardItem({
 }) {
   const [outputId, setOutputId] = useState<number | undefined>(undefined);
 
-  monitorDataOutput({
+  useMonitorDataOutput({
     api: context.api,
     queryClient: context.queryClient,
     id: outputId,
