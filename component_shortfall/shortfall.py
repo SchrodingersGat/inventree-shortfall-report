@@ -330,6 +330,7 @@ def calculate_shortfall(
         "Category Name",
         "Current Stock",
         "On Order",
+        "In Production",
         "Required Quantity",
         "Shortfall",
         "Units",
@@ -347,10 +348,11 @@ def calculate_shortfall(
             part.IPN,
             part.category.pk if part.category else None,
             part.category.pathstring if part.category else None,
-            data["stock"],
-            data["on_order"],
-            data["required"],
-            data["shortfall"],
+            Decimal(data["stock"]),
+            Decimal(data["on_order"]),
+            Decimal(data["in_production"]),
+            Decimal(data["required"]),
+            Decimal(data["shortfall"]),
             part.units,
         ]
         dataset.append(row)
