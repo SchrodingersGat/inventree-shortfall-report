@@ -65,20 +65,10 @@ function ComponentShortfallDashboardItem({
     }
   });
 
-  const wizard = (context as any).wizards.importData({
-    sessionId: selectedSession,
-    opened: importOpened,
-    onClose: () => {
-      setSelectedSession(undefined);
-      setImportOpened(false);
-    }
-  });
-
   return (
     <>
       {importData.modal}
       {generateReport.modal}
-      {wizard.wizard}
       <Stack gap='xs'>
         <Text size='lg'>Generate Shortfall Report</Text>
         <Button
@@ -98,9 +88,5 @@ export function renderComponentShortfallDashboardItem(
   context: InvenTreePluginContext
 ) {
   checkPluginVersion(context);
-
-  console.log("context:");
-  console.log(context);
-
   return <ComponentShortfallDashboardItem context={context} />;
 }
