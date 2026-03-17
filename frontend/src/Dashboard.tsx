@@ -1,7 +1,5 @@
 // Import for type checking
 import {
-  ApiEndpoints,
-  ApiFormFieldSet,
   apiUrl,
   checkPluginVersion,
   type InvenTreePluginContext,
