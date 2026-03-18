@@ -72,7 +72,11 @@ def update_part_requirements(
 
     # Calculate the "shortfall" for this part
     requirements["shortfall"] = max(
-        0, requirements["required"] - requirements["stock"] - requirements["on_order"] - requirements["in_production"]
+        0,
+        requirements["required"]
+        - requirements["stock"]
+        - requirements["on_order"]
+        - requirements["in_production"],
     )
 
     # Update the global dict of component data
@@ -82,7 +86,9 @@ def update_part_requirements(
     return requirements["shortfall"] - initial_shortfall
 
 
-def get_outstanding_sales_order_parts(category: Optional[part_models.PartCategory] = None) -> dict:
+def get_outstanding_sales_order_parts(
+    category: Optional[part_models.PartCategory] = None,
+) -> dict:
     """Return a dict of outstanding parts (based on open sales orders).
 
     Returns a dict of part requirements, with the part ID as the key.
@@ -135,7 +141,9 @@ def get_outstanding_sales_order_parts(category: Optional[part_models.PartCategor
     return outstanding_parts
 
 
-def get_outstanding_build_order_parts(category: Optional[part_models.PartCategory] = None) -> dict:
+def get_outstanding_build_order_parts(
+    category: Optional[part_models.PartCategory] = None,
+) -> dict:
     """Return a dict of outstanding parts (based on open build orders).
 
     Returns a dict of part requirements, with the part ID as the key.
@@ -196,7 +204,7 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
 
     # Start with the outstanding sales order parts
     outstanding_parts = {}
-    
+
     so_parts = get_outstanding_sales_order_parts(category=category)
     bo_parts = get_outstanding_build_order_parts(category=category)
 
@@ -214,14 +222,18 @@ def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -
 
 
 def calculate_shortfall(
-    output_id: int, category_id: Optional[int] = None, max_bom_depth: int = 50
+    output_id: int,
+    category_id: Optional[int] = None,
+    max_bom_depth: int = 50,
+    hide_no_shortfall: bool = True,
 ) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
     Arguments:
         output_id: The ID of the DataOutput (where to save the results)
-        max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
         category_id: The ID of the category to filter parts by (optional)
+        max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
+        hide_no_shortfall: Whether to hide parts with no shortfall in the report (default: True)
 
     Returns:
         A dict of part requirements, with the part ID as the key.
@@ -341,6 +353,10 @@ def calculate_shortfall(
     for _, data in requirements.items():
         part = data["part"]
         url = construct_absolute_url(part.get_absolute_url())
+        shortfall = data.get("shortfall", Decimal(0))
+
+        if hide_no_shortfall and shortfall <= 0:
+            continue
 
         row = [
             f'=HYPERLINK("{url}", "{part.pk}")',
