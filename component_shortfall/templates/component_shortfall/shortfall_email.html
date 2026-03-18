@@ -16,6 +16,7 @@
         <th>Required</th>
         <th>Stock</th>
         <th>On Order</th>
+        <th>In Production</th>
         <th>Shortfall</th>
         <th>Units</th>
     </tr>
@@ -27,6 +28,7 @@
         <td>{% format_number entry.required %}</td>
         <td>{% format_number entry.stock %}</td>
         <td>{% format_number entry.on_order %}</td>
+        <td>{% format_number entry.in_production %}</td>
         <td>{% format_number entry.shortfall %}</td>
         <td>
             {% if entry.part.units %}
