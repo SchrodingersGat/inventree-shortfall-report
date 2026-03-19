@@ -2,8 +2,9 @@
 
 import structlog
 
-from plugin import InvenTreePlugin
+from django.contrib.auth.models import Group
 
+from plugin import InvenTreePlugin
 from plugin.mixins import ScheduleMixin, SettingsMixin, UrlsMixin, UserInterfaceMixin
 
 from . import PLUGIN_VERSION
@@ -82,9 +83,13 @@ class ComponentShortfall(
     def get_ui_dashboard_items(self, request, context: dict, **kwargs):
         """Return a list of custom dashboard items to be rendered in the InvenTree user interface."""
 
-        # Example: only display for 'staff' users
-        if not request.user or not request.user.is_staff:
+        if not request.user or not request.user.is_authenticated:
             return []
+
+        # Only display for users in the selected group
+        if group := self.get_plugin_group():
+            if not request.user.groups.filter(pk=group.pk).exists():
+                return []
 
         items = []
 
@@ -114,6 +119,19 @@ class ComponentShortfall(
             }
         ]
 
+    def get_plugin_group(self) -> Group | None:
+        """Return the user group associated with this plugin, if any."""
+        group_id = self.get_setting("SHORTFALL_REPORT_GROUP")
+
+        if not group_id:
+            return None
+
+        try:
+            group = Group.objects.get(pk=group_id)
+            return group
+        except (ValueError, Group.DoesNotExist):
+            return None
+
     def periodic_shortfall_report(self):
         """Scheduled task to periodically generate a shortfall report.
 
@@ -124,7 +142,6 @@ class ComponentShortfall(
         import InvenTree.tasks
         from common.models import DataOutput
         from .shortfall import calculate_shortfall, format_shortfall_report_html
-        from django.contrib.auth.models import Group
 
         report_period = int(self.get_setting("SHORTFALL_REPORT_DAYS"))
 
@@ -156,17 +173,10 @@ class ComponentShortfall(
 
         data_output.refresh_from_db()
 
-        # Email the report to interested users?
-        report_group_id = self.get_setting("SHORTFALL_REPORT_GROUP")
-
         users = []
 
-        try:
-            if report_group_id:
-                group = Group.objects.get(pk=report_group_id)
-                users = group.user_set.filter(is_active=True)
-        except (ValueError, Group.DoesNotExist):
-            pass
+        if group := self.get_plugin_group():
+            users = group.user_set.filter(is_active=True)
 
         recipients = []
 
