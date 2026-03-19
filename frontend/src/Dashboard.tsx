@@ -5,7 +5,7 @@ import {
   type InvenTreePluginContext,
   useMonitorDataOutput
 } from '@inventreedb/ui';
-import { Button, Stack, Text } from '@mantine/core';
+import { Button, Divider, Space, Stack, Title } from '@mantine/core';
 import { IconClipboardList } from '@tabler/icons-react';
 import { useState } from 'react';
 
@@ -45,7 +45,11 @@ function ComponentShortfallDashboardItem({
     <>
       {generateReport.modal}
       <Stack gap='xs'>
-        <Text size='lg'>Generate Shortfall Report</Text>
+        <Title c={context.theme?.primaryColor} order={3}>
+          Component Shortfall Report
+        </Title>
+        <Divider />
+        <Space />
         <Button
           leftSection={<IconClipboardList />}
           onClick={() => generateReport.open()}

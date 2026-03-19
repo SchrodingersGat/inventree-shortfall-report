@@ -52,12 +52,19 @@ export default defineConfig({
         './src/Dashboard.tsx',
         
       ],
-      output: {
-        dir: '../component_shortfall/static',
-        entryFileNames: '[name].js',
-        assetFileNames: 'assets/[name].[ext]',
-        globals: externalLibs,
-      },
+      output: [
+        {
+          dir: '../component_shortfall/static',
+          entryFileNames: '[name].js',
+          assetFileNames: 'assets/[name].[ext]',
+          globals: externalLibs,
+        },
+        {
+          dir: '../component_shortfall/static',
+          entryFileNames: '[name]-[hash].min.js',
+          assetFileNames: 'assets/[name].[ext]',
+        },
+      ],
       external: externalKeys,
     }
   },
