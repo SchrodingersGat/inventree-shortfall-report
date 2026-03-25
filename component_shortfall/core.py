@@ -107,17 +107,20 @@ class ComponentShortfall(
 
     def get_ui_spotlight_actions(self, request, context, **kwargs):
         """Return a list of custom spotlight actions to be made available."""
-        return [
-            {
-                "key": "shortfall-action",
-                "title": "Shortfall Report",
-                "description": "Generate a component shortfall report",
-                "icon": "ti:clipboard-check:outline",
-                "source": self.plugin_static_file(
-                    "Spotlight.js:ComponentShortfallSpotlightAction"
-                ),
-            }
-        ]
+
+        # TODO: Add this code back in when the spotlight action is implemented - for now, we just have a dashboard item
+        # return [
+        #     {
+        #         "key": "shortfall-action",
+        #         "title": "Shortfall Report",
+        #         "description": "Generate a component shortfall report",
+        #         "icon": "ti:clipboard-check:outline",
+        #         "source": self.plugin_static_file(
+        #             "Spotlight.js:ComponentShortfallSpotlightAction"
+        #         ),
+        #     }
+        # ]
+        return []
 
     def get_plugin_group(self) -> Group | None:
         """Return the user group associated with this plugin, if any."""
