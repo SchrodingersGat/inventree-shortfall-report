@@ -90,7 +90,6 @@ def update_part_requirements(
 
 
 def get_outstanding_sales_order_parts(
-    category: Optional[part_models.PartCategory] = None,
     horizon_date: Optional[date] = None,
 ) -> dict:
     """Return a dict of outstanding parts (based on open sales orders).
@@ -127,11 +126,6 @@ def get_outstanding_sales_order_parts(
             Q(order__target_date__isnull=True) | Q(order__target_date__lte=horizon_date)
         )
 
-    # Filter by part category (e.g. only include orders for parts within a certain category)
-    if category:
-        categories = category.get_descendants(include_self=True)
-        sales_order_lines = sales_order_lines.filter(part__category__in=categories)
-
     outstanding_parts = {}
 
     for line in sales_order_lines:
@@ -152,7 +146,6 @@ def get_outstanding_sales_order_parts(
 
 
 def get_outstanding_build_order_parts(
-    category: Optional[part_models.PartCategory] = None,
     horizon_date: Optional[date] = None,
 ) -> dict:
     """Return a dict of outstanding parts (based on open build orders).
@@ -190,13 +183,6 @@ def get_outstanding_build_order_parts(
             Q(build__target_date__isnull=True) | Q(build__target_date__lte=horizon_date)
         )
 
-    # Filter by part category (e.g. only include orders for parts within a certain category)
-    if category:
-        categories = category.get_descendants(include_self=True)
-        build_order_lines = build_order_lines.filter(
-            build__part__category__in=categories
-        )
-
     outstanding_parts = {}
 
     for line in build_order_lines:
@@ -219,7 +205,6 @@ def get_outstanding_build_order_parts(
 
 
 def get_outstanding_parts(
-    category: Optional[part_models.PartCategory] = None,
     horizon_date: Optional[date] = None,
 ) -> dict:
     """Return a dict of outstanding parts (based on open sales orders and build orders)."""
@@ -227,8 +212,8 @@ def get_outstanding_parts(
     # Start with the outstanding sales order parts
     outstanding_parts = {}
 
-    so_parts = get_outstanding_sales_order_parts(category=category, horizon_date=horizon_date)
-    bo_parts = get_outstanding_build_order_parts(category=category, horizon_date=horizon_date)
+    so_parts = get_outstanding_sales_order_parts(horizon_date=horizon_date)
+    bo_parts = get_outstanding_build_order_parts(horizon_date=horizon_date)
 
     def add_part_info(parts):
         for part_id, part_data in parts.items():
@@ -280,16 +265,18 @@ def calculate_shortfall(
         )
         return
 
-    try:
-        if category_id:
+    # If a PartCategory ID is provided, attempt to fetch the category - if it does not exist, then we will simply ignore the category filter and include all parts in the report
+    # We will use this to generate a list of categories, to filter the output dataset
+    categories = None
+
+    if category_id:
+        try:
             category = part_models.PartCategory.objects.get(pk=category_id)
-        else:
-            category = None
-    except (ValueError, part_models.PartCategory.DoesNotExist):
-        logger.warning(
-            f"component_shortfall: PartCategory with ID {category_id} does not exist - cannot filter parts"
-        )
-        category = None
+            categories = category.get_descendants(include_self=True)
+        except (ValueError, part_models.PartCategory.DoesNotExist):
+            logger.warning(
+                f"component_shortfall: PartCategory with ID {category_id} does not exist - cannot filter parts"
+            )
 
     horizon_date = date.today() + relativedelta(months=horizon_months) if horizon_months > 0 else None
 
@@ -378,6 +365,11 @@ def calculate_shortfall(
 
     for _, data in requirements.items():
         part = data["part"]
+
+        # If category filtering is enabled, and this part does not belong to the selected category (or its descendants), then skip this part
+        if categories and part.category not in categories:
+            continue
+
         url = construct_absolute_url(part.get_absolute_url())
         shortfall = data.get("shortfall", Decimal(0))
 
