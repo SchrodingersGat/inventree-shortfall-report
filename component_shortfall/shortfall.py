@@ -11,9 +11,12 @@ Process Goals:
 
 from typing import Optional
 from decimal import Decimal
+from datetime import date
 import os
 import structlog
 import tablib
+
+from dateutil.relativedelta import relativedelta
 
 from django.core.files.base import ContentFile
 from django.db.models import F
@@ -88,6 +91,7 @@ def update_part_requirements(
 
 def get_outstanding_sales_order_parts(
     category: Optional[part_models.PartCategory] = None,
+    horizon_date: Optional[date] = None,
 ) -> dict:
     """Return a dict of outstanding parts (based on open sales orders).
 
@@ -99,8 +103,10 @@ def get_outstanding_sales_order_parts(
 
     Arguments:
         - category: Optional category to filter the parts by
+        - horizon_date: Optional cutoff date; orders with a target date beyond this are excluded
     """
 
+    from django.db.models import Q
     from order.models import SalesOrderLineItem
     from order.status_codes import SalesOrderStatusGroups
 
@@ -115,7 +121,11 @@ def get_outstanding_sales_order_parts(
 
     # TODO: Filter by order status (e.g. exclude pending orders)
 
-    # TODO: Filter by order date (e.g. only include orders which are due within a certain time frame)
+    # Exclude orders whose target date lies beyond the horizon (undated orders are always included)
+    if horizon_date:
+        sales_order_lines = sales_order_lines.filter(
+            Q(order__target_date__isnull=True) | Q(order__target_date__lte=horizon_date)
+        )
 
     # Filter by part category (e.g. only include orders for parts within a certain category)
     if category:
@@ -143,6 +153,7 @@ def get_outstanding_sales_order_parts(
 
 def get_outstanding_build_order_parts(
     category: Optional[part_models.PartCategory] = None,
+    horizon_date: Optional[date] = None,
 ) -> dict:
     """Return a dict of outstanding parts (based on open build orders).
 
@@ -154,8 +165,10 @@ def get_outstanding_build_order_parts(
 
     Arguments:
         - category: Optional category to filter the parts by
+        - horizon_date: Optional cutoff date; build orders with a target date beyond this are excluded
     """
 
+    from django.db.models import Q
     from build.models import BuildLine
     from build.status_codes import BuildStatusGroups
 
@@ -170,6 +183,12 @@ def get_outstanding_build_order_parts(
     ).prefetch_related(
         "bom_item__sub_part",
     )
+
+    # Exclude build orders whose target date lies beyond the horizon (undated builds are always included)
+    if horizon_date:
+        build_order_lines = build_order_lines.filter(
+            Q(build__target_date__isnull=True) | Q(build__target_date__lte=horizon_date)
+        )
 
     # Filter by part category (e.g. only include orders for parts within a certain category)
     if category:
@@ -199,14 +218,17 @@ def get_outstanding_build_order_parts(
     return outstanding_parts
 
 
-def get_outstanding_parts(category: Optional[part_models.PartCategory] = None) -> dict:
+def get_outstanding_parts(
+    category: Optional[part_models.PartCategory] = None,
+    horizon_date: Optional[date] = None,
+) -> dict:
     """Return a dict of outstanding parts (based on open sales orders and build orders)."""
 
     # Start with the outstanding sales order parts
     outstanding_parts = {}
 
-    so_parts = get_outstanding_sales_order_parts(category=category)
-    bo_parts = get_outstanding_build_order_parts(category=category)
+    so_parts = get_outstanding_sales_order_parts(category=category, horizon_date=horizon_date)
+    bo_parts = get_outstanding_build_order_parts(category=category, horizon_date=horizon_date)
 
     def add_part_info(parts):
         for part_id, part_data in parts.items():
@@ -226,6 +248,7 @@ def calculate_shortfall(
     category_id: Optional[int] = None,
     max_bom_depth: int = 50,
     hide_no_shortfall: bool = True,
+    horizon_months: int = 12,
 ) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
@@ -234,6 +257,7 @@ def calculate_shortfall(
         category_id: The ID of the category to filter parts by (optional)
         max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
         hide_no_shortfall: Whether to hide parts with no shortfall in the report (default: True)
+        horizon_months: Only consider orders due within this many months; 0 means no limit (default: 12)
 
     Returns:
         A dict of part requirements, with the part ID as the key.
@@ -267,8 +291,10 @@ def calculate_shortfall(
         )
         category = None
 
+    horizon_date = date.today() + relativedelta(months=horizon_months) if horizon_months > 0 else None
+
     # First, determine the set of components which are "on order"
-    initial_parts = get_outstanding_parts(category=category)
+    initial_parts = get_outstanding_parts(category=category, horizon_date=horizon_date)
 
     # Let's keep track of all the requirements, top-to-bottom, in a single dict - keyed by part ID
     # key: part ID
