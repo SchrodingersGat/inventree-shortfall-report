@@ -33,6 +33,7 @@ function ComponentShortfallDashboardItem({
     url: apiUrl('/plugin/component-shortfall/shortfall/'),
     fields: {
       category: {},
+      horizon_months: {},
       max_bom_depth: {}
     },
     successMessage: null,
