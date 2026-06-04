@@ -58,6 +58,13 @@ class ComponentShortfall(
             "description": "User group to send periodic shortfall reports",
             "model": "auth.group",
         },
+        "SHORTFALL_HORIZON_MONTHS": {
+            "name": "Shortfall Horizon",
+            "description": "Only consider orders due within this many months (orders with no due date are always included)",
+            "default": 12,
+            "units": "months",
+            "validator": int,
+        },
     }
 
     # Custom URL endpoints (from UrlsMixin)
@@ -170,9 +177,10 @@ class ComponentShortfall(
         )
 
         hide_no_shortfall = self.get_setting("HIDE_NO_SHORTFALL")
+        horizon_months = int(self.get_setting("SHORTFALL_HORIZON_MONTHS"))
 
         # Calculate shortfall report with default settings
-        requirements = calculate_shortfall(data_output.pk)
+        requirements = calculate_shortfall(data_output.pk, horizon_months=horizon_months)
 
         data_output.refresh_from_db()
 
