@@ -206,14 +206,19 @@ def get_outstanding_build_order_parts(
 
 def get_outstanding_parts(
     horizon_date: Optional[date] = None,
+    include_build_orders: bool = True,
+    include_sales_orders: bool = True,
 ) -> dict:
-    """Return a dict of outstanding parts (based on open sales orders and build orders)."""
+    """Return a dict of outstanding parts (based on open sales orders and build orders).
+    
+    Arguments:
+        horizon_date: Optional cutoff date; orders with a target date beyond this are excluded
+        include_build_orders: Whether to include build orders in the calculation (default: True)
+        include_sales_orders: Whether to include sales orders in the calculation (default: True)
+    """
 
     # Start with the outstanding sales order parts
     outstanding_parts = {}
-
-    so_parts = get_outstanding_sales_order_parts(horizon_date=horizon_date)
-    bo_parts = get_outstanding_build_order_parts(horizon_date=horizon_date)
 
     def add_part_info(parts):
         for part_id, part_data in parts.items():
@@ -222,8 +227,13 @@ def get_outstanding_parts(
             else:
                 outstanding_parts[part_id] = part_data
 
-    add_part_info(so_parts)
-    add_part_info(bo_parts)
+    if include_build_orders:
+        bo_parts = get_outstanding_build_order_parts(horizon_date=horizon_date)
+        add_part_info(bo_parts)
+
+    if include_sales_orders:
+        so_parts = get_outstanding_sales_order_parts(horizon_date=horizon_date)
+        add_part_info(so_parts)
 
     return outstanding_parts
 
@@ -234,6 +244,8 @@ def calculate_shortfall(
     max_bom_depth: int = 50,
     hide_no_shortfall: bool = True,
     horizon_months: int = 12,
+    include_build_orders: bool = True,
+    include_sales_orders: bool = True,
 ) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
@@ -243,6 +255,8 @@ def calculate_shortfall(
         max_bom_depth: The maximum depth to traverse the BOM when calculating shortfall (default: 50)
         hide_no_shortfall: Whether to hide parts with no shortfall in the report (default: True)
         horizon_months: Only consider orders due within this many months; 0 means no limit (default: 12)
+        include_build_orders: Whether to include build orders in the calculation (default: True)
+        include_sales_orders: Whether to include sales orders in the calculation (default: True)
 
     Returns:
         A dict of part requirements, with the part ID as the key.
@@ -281,7 +295,11 @@ def calculate_shortfall(
     horizon_date = date.today() + relativedelta(months=horizon_months) if horizon_months > 0 else None
 
     # First, determine the set of components which are "on order"
-    initial_parts = get_outstanding_parts(category=category, horizon_date=horizon_date)
+    initial_parts = get_outstanding_parts(
+        horizon_date=horizon_date,
+        include_build_orders=include_build_orders,
+        include_sales_orders=include_sales_orders,
+    )
 
     # Let's keep track of all the requirements, top-to-bottom, in a single dict - keyed by part ID
     # key: part ID

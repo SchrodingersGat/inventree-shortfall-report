@@ -54,6 +54,20 @@ class ShortfallReportSerializer(serializers.Serializer):
         help_text=_("Only consider orders due within this many months (0 = no limit); defaults to the plugin setting"),
     )
 
+    include_build_orders = serializers.BooleanField(
+        required=False,
+        default=True,
+        label=_("Include Build Orders"),
+        help_text=_("Whether to include build orders in the shortfall calculation"),
+    )
+
+    include_sales_orders = serializers.BooleanField(
+        required=False,
+        default=True,
+        label=_("Include Sales Orders"),
+        help_text=_("Whether to include sales orders in the shortfall calculation"),
+    )
+
     def validate(self, data):
         """Validate the provided data."""
 
