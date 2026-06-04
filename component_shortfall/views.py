@@ -32,6 +32,8 @@ class ShortfallReportView(CreateAPI):
         category = serializer.validated_data.get("category", None)
         max_bom_depth = serializer.validated_data.get("max_bom_depth", 50)
         horizon_months = serializer.validated_data.get("horizon_months")
+        include_build_orders = serializer.validated_data.get("include_build_orders", True)
+        include_sales_orders = serializer.validated_data.get("include_sales_orders", True)
 
         data_output = DataOutput.objects.create(
             user=request.user,
@@ -49,6 +51,8 @@ class ShortfallReportView(CreateAPI):
             category_id=category.pk if category else None,
             max_bom_depth=max_bom_depth,
             horizon_months=horizon_months,
+            include_build_orders=include_build_orders,
+            include_sales_orders=include_sales_orders,
             group="shortfall_report",
         )
 
