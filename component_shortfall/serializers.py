@@ -15,6 +15,15 @@ import part.models as part_models
 class ShortfallReportSerializer(serializers.Serializer):
     """Serializer for shortfall report request parameters."""
 
+    def __init__(self, *args, **kwargs):
+        """Set horizon_months default from the plugin setting."""
+        super().__init__(*args, **kwargs)
+
+        from plugin.registry import registry
+        plugin = registry.get_plugin("component-shortfall")
+        default_horizon = int(plugin.get_setting("SHORTFALL_HORIZON_MONTHS")) if plugin else 12
+        self.fields["horizon_months"].default = default_horizon
+
     category = serializers.PrimaryKeyRelatedField(
         queryset=part_models.PartCategory.objects.all(),
         many=False,
@@ -36,6 +45,13 @@ class ShortfallReportSerializer(serializers.Serializer):
         max_value=50,
         label=_("Maximum BOM Depth"),
         help_text=_("The maximum depth to traverse the BOM when calculating shortfall"),
+    )
+
+    horizon_months = serializers.IntegerField(
+        required=False,
+        min_value=0,
+        label=_("Horizon (Months)"),
+        help_text=_("Only consider orders due within this many months (0 = no limit); defaults to the plugin setting"),
     )
 
     def validate(self, data):
