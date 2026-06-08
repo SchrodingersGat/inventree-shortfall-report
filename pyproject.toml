@@ -20,6 +20,7 @@ keywords = ["inventree", "plugin"]
 requires-python = ">=3.9"
 dependencies = [
     # Enter your plugin library dependencies here
+    "openpyxl",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
