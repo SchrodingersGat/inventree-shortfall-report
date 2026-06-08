@@ -377,8 +377,7 @@ def calculate_shortfall(
     ws.append([
         "Part Name",
         "Part IPN",
-        "Category ID",
-        "Category Name",
+        "Category",
         "Current Stock",
         "On Order",
         "In Production",
@@ -404,7 +403,6 @@ def calculate_shortfall(
         ws.append([
             part.name,
             part.IPN,
-            part.category.pk if part.category else None,
             part.category.pathstring if part.category else None,
             Decimal(data["stock"]),
             Decimal(data["on_order"]),
@@ -414,9 +412,16 @@ def calculate_shortfall(
             part.units,
         ])
 
+        # Generate link for the part
         cell = ws.cell(row=ws.max_row, column=1)
         cell.hyperlink = construct_absolute_url(part.get_absolute_url())
         cell.font = hyperlink_font
+
+        # Generate link for the category
+        if part.category:
+            cell = ws.cell(row=ws.max_row, column=3)
+            cell.hyperlink = construct_absolute_url(part.category.get_absolute_url())
+            cell.font = hyperlink_font
 
     buf = io.BytesIO()
     wb.save(buf)
