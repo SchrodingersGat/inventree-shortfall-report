@@ -14,7 +14,6 @@ from decimal import Decimal
 from datetime import date
 import os
 import structlog
-import tablib
 
 from dateutil.relativedelta import relativedelta
 
@@ -22,6 +21,10 @@ from django.core.files.base import ContentFile
 from django.db.models import F
 
 from InvenTree.helpers_model import construct_absolute_url
+
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font
 
 import common.models as common_models
 import part.models as part_models
@@ -210,7 +213,7 @@ def get_outstanding_parts(
     include_sales_orders: bool = True,
 ) -> dict:
     """Return a dict of outstanding parts (based on open sales orders and build orders).
-    
+
     Arguments:
         horizon_date: Optional cutoff date; orders with a target date beyond this are excluded
         include_build_orders: Whether to include build orders in the calculation (default: True)
@@ -292,7 +295,11 @@ def calculate_shortfall(
                 f"component_shortfall: PartCategory with ID {category_id} does not exist - cannot filter parts"
             )
 
-    horizon_date = date.today() + relativedelta(months=horizon_months) if horizon_months > 0 else None
+    horizon_date = (
+        date.today() + relativedelta(months=horizon_months)
+        if horizon_months > 0
+        else None
+    )
 
     # First, determine the set of components which are "on order"
     initial_parts = get_outstanding_parts(
@@ -365,21 +372,21 @@ def calculate_shortfall(
                 data_output.total += 1
 
     # Generate the output data file
-    headers = [
-        "Part ID",
+    wb = Workbook()
+    ws = wb.active
+    ws.append([
         "Part Name",
         "Part IPN",
-        "Category ID",
-        "Category Name",
+        "Category",
         "Current Stock",
         "On Order",
         "In Production",
         "Required Quantity",
         "Shortfall",
         "Units",
-    ]
+    ])
 
-    dataset = tablib.Dataset(headers=headers)
+    hyperlink_font = Font(color="0563C1", underline="single")
 
     for _, data in requirements.items():
         part = data["part"]
@@ -388,17 +395,14 @@ def calculate_shortfall(
         if categories and part.category not in categories:
             continue
 
-        url = construct_absolute_url(part.get_absolute_url())
         shortfall = data.get("shortfall", Decimal(0))
 
         if hide_no_shortfall and shortfall <= 0:
             continue
 
-        row = [
-            f'=HYPERLINK("{url}", "{part.pk}")',
+        ws.append([
             part.name,
             part.IPN,
-            part.category.pk if part.category else None,
             part.category.pathstring if part.category else None,
             Decimal(data["stock"]),
             Decimal(data["on_order"]),
@@ -406,11 +410,22 @@ def calculate_shortfall(
             Decimal(data["required"]),
             Decimal(data["shortfall"]),
             part.units,
-        ]
-        dataset.append(row)
+        ])
 
-    # Attach the generated file to the data output
-    datafile = dataset.export("xlsx")
+        # Generate link for the part
+        cell = ws.cell(row=ws.max_row, column=1)
+        cell.hyperlink = construct_absolute_url(part.get_absolute_url())
+        cell.font = hyperlink_font
+
+        # Generate link for the category
+        if part.category:
+            cell = ws.cell(row=ws.max_row, column=3)
+            cell.hyperlink = construct_absolute_url(part.category.get_absolute_url())
+            cell.font = hyperlink_font
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    datafile = buf.getvalue()
 
     data_output.mark_complete(
         output=ContentFile(datafile, name="shortfall_report.xlsx")
