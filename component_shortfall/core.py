@@ -65,6 +65,11 @@ class ComponentShortfall(
             "units": "months",
             "validator": int,
         },
+        "SHORTFALL_PARAMETER_TEMPLATE": {
+            "name": "Shortfall Parameter Template",
+            "description": "Parameter template for recording shortfall against parts",
+            "model": "common.parametertemplate",
+        },
     }
 
     # Custom URL endpoints (from UrlsMixin)
@@ -180,7 +185,9 @@ class ComponentShortfall(
         horizon_months = int(self.get_setting("SHORTFALL_HORIZON_MONTHS"))
 
         # Calculate shortfall report with default settings
-        requirements = calculate_shortfall(data_output.pk, horizon_months=horizon_months)
+        requirements = calculate_shortfall(
+            data_output.pk, horizon_months=horizon_months
+        )
 
         data_output.refresh_from_db()
 
