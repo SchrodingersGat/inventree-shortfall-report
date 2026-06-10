@@ -7,6 +7,8 @@ Ref: https://www.django-rest-framework.org/api-guide/views/
 
 from rest_framework import permissions
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
+
 from InvenTree.mixins import CreateAPI
 from InvenTree.tasks import offload_task
 
@@ -24,6 +26,14 @@ class ShortfallReportView(CreateAPI):
     def post(self, request, *args, **kwargs):
         """Handle POST requests to generate a shortfall report."""
 
+        # Retrieve the parameter template setting from the plugin
+        from plugin import registry as plugin_registry
+
+        plugin_instance = plugin_registry.get_plugin("component-shortfall")
+
+        if not plugin_instance:
+            raise ValidationError("Component Shortfall plugin not activated")
+
         # Validate the incoming request data using the serializer
         serializer = ShortfallReportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -32,8 +42,12 @@ class ShortfallReportView(CreateAPI):
         category = serializer.validated_data.get("category", None)
         max_bom_depth = serializer.validated_data.get("max_bom_depth", 50)
         horizon_months = serializer.validated_data.get("horizon_months")
-        include_build_orders = serializer.validated_data.get("include_build_orders", True)
-        include_sales_orders = serializer.validated_data.get("include_sales_orders", True)
+        include_build_orders = serializer.validated_data.get(
+            "include_build_orders", True
+        )
+        include_sales_orders = serializer.validated_data.get(
+            "include_sales_orders", True
+        )
 
         data_output = DataOutput.objects.create(
             user=request.user,
@@ -41,6 +55,10 @@ class ShortfallReportView(CreateAPI):
             progress=0,
             output_type="shortfall_report",
             plugin="component-shortfall",
+        )
+
+        parameter_template_id = (
+            plugin_instance.get_setting("SHORTFALL_PARAMETER_TEMPLATE") or None
         )
 
         # This report may be expensive to calculate
@@ -53,6 +71,7 @@ class ShortfallReportView(CreateAPI):
             horizon_months=horizon_months,
             include_build_orders=include_build_orders,
             include_sales_orders=include_sales_orders,
+            parameter_template_id=parameter_template_id,
             group="shortfall_report",
         )
 

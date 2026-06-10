@@ -183,10 +183,13 @@ class ComponentShortfall(
 
         hide_no_shortfall = self.get_setting("HIDE_NO_SHORTFALL")
         horizon_months = int(self.get_setting("SHORTFALL_HORIZON_MONTHS"))
+        parameter_template_id = self.get_setting("SHORTFALL_PARAMETER_TEMPLATE") or None
 
         # Calculate shortfall report with default settings
         requirements = calculate_shortfall(
-            data_output.pk, horizon_months=horizon_months
+            data_output.pk,
+            horizon_months=horizon_months,
+            parameter_template_id=parameter_template_id,
         )
 
         data_output.refresh_from_db()

@@ -20,6 +20,7 @@ from dateutil.relativedelta import relativedelta
 from django.core.files.base import ContentFile
 from django.db.models import F
 
+from InvenTree.helpers import normalize
 from InvenTree.helpers_model import construct_absolute_url
 
 import io
@@ -241,6 +242,46 @@ def get_outstanding_parts(
     return outstanding_parts
 
 
+def record_shortfall_parameters(requirements: dict, parameter_template_id: int) -> None:
+    """Record shortfall values against parts using the given parameter template.
+
+    For parts with non-zero shortfall, creates or updates the parameter value.
+    For parts with zero shortfall, removes any existing parameter value.
+    """
+
+    try:
+        template = common_models.ParameterTemplate.objects.get(pk=parameter_template_id)
+    except (ValueError, common_models.ParameterTemplate.DoesNotExist):
+        logger.warning(
+            f"record_shortfall_parameters: ParameterTemplate with ID {parameter_template_id} does not exist"
+        )
+        return
+
+    content_type = part_models.Part.get_content_type()
+
+    shortfall_ids = set()
+
+    for _, data in requirements.items():
+        part = data["part"]
+        shortfall = data.get("shortfall", Decimal(0))
+
+        if shortfall > 0:
+            # Ignore locked parts (for now)
+            if part.locked:
+                continue
+
+            common_models.Parameter.objects.update_or_create(
+                model_type=content_type,
+                model_id=part.pk,
+                template=template,
+                defaults={"data": str(normalize(shortfall))},
+            )
+
+            shortfall_ids.add(part.pk)
+
+    # TODO: Remove any "shortfall" parameters for parts which are no longer in shortfall - we can identify these as any parameters which exist for this template, but whose part ID is not in the shortfall_ids set
+
+
 def calculate_shortfall(
     output_id: int,
     category_id: Optional[int] = None,
@@ -249,6 +290,7 @@ def calculate_shortfall(
     horizon_months: int = 12,
     include_build_orders: bool = True,
     include_sales_orders: bool = True,
+    parameter_template_id: Optional[int] = None,
 ) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
@@ -260,6 +302,7 @@ def calculate_shortfall(
         horizon_months: Only consider orders due within this many months; 0 means no limit (default: 12)
         include_build_orders: Whether to include build orders in the calculation (default: True)
         include_sales_orders: Whether to include sales orders in the calculation (default: True)
+        parameter_template_id: Optional ID of a ParameterTemplate to record shortfall values against
 
     Returns:
         A dict of part requirements, with the part ID as the key.
@@ -370,6 +413,10 @@ def calculate_shortfall(
 
                 components_to_process.append((sub_part, required_qty, level + 1))
                 data_output.total += 1
+
+    # Record shortfall values against parts using the configured parameter template
+    if parameter_template_id:
+        record_shortfall_parameters(requirements, parameter_template_id)
 
     # Generate the output data file
     wb = Workbook()
