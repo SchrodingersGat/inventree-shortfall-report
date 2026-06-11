@@ -7,6 +7,7 @@ Ref: https://www.django-rest-framework.org/api-guide/views/
 
 from rest_framework import permissions
 from rest_framework.response import Response
+
 from InvenTree.mixins import CreateAPI
 from InvenTree.tasks import offload_task
 
@@ -32,8 +33,12 @@ class ShortfallReportView(CreateAPI):
         category = serializer.validated_data.get("category", None)
         max_bom_depth = serializer.validated_data.get("max_bom_depth", 50)
         horizon_months = serializer.validated_data.get("horizon_months")
-        include_build_orders = serializer.validated_data.get("include_build_orders", True)
-        include_sales_orders = serializer.validated_data.get("include_sales_orders", True)
+        include_build_orders = serializer.validated_data.get(
+            "include_build_orders", True
+        )
+        include_sales_orders = serializer.validated_data.get(
+            "include_sales_orders", True
+        )
 
         data_output = DataOutput.objects.create(
             user=request.user,
