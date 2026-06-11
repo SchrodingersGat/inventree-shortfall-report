@@ -38,6 +38,7 @@ pip install -U inventree-component-shortfall
 | Shortfall Report Days | How often (in days) the scheduled report runs; set to `0` to disable (default: 7) |
 | Shortfall Report Group | User group that receives periodic email reports |
 | Shortfall Horizon (Months) | Only consider orders due within this many months; orders with no due date are always included; set to `0` for no limit (default: 12) |
+| Shortfall Parameter Template | A parameter template used to record the shortfall quantity directly against each part; leave blank to disable (default: disabled) |
 
 ## Usage
 
@@ -56,6 +57,15 @@ The generated `.xlsx` file contains the following columns for each component:
 | In Production | Quantity allocated to active build orders |
 | Required Quantity | Total quantity needed across all outstanding orders |
 | Shortfall | Deficit after accounting for stock, on-order, and in-production quantities |
+
+### Shortfall Parameter Recording
+
+When a *Shortfall Parameter Template* is configured, the plugin writes the shortfall quantity as a part parameter on each affected component after every report run:
+
+- **Parts with shortfall > 0** — the parameter value is created or updated with the shortfall quantity.
+- **Parts with shortfall = 0** — any existing parameter value for that template is deleted, keeping the data set clean.
+
+This makes shortfall data queryable and filterable directly from the InvenTree part list, and allows the values to be used in other automations or reports. The parameter template must already exist in InvenTree before selecting it in this setting.
 
 ### Scheduled Email Reports
 
