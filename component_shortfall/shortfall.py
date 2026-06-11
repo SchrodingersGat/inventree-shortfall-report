@@ -313,7 +313,7 @@ def record_shortfall_parameters(requirements: dict, parameter_template_id: int) 
         print(
             f"Deleting {to_delete.count()} shortfall parameters for parts no longer in shortfall"
         )
-        # to_delete.delete()
+        to_delete.delete()
 
 
 def calculate_shortfall(
