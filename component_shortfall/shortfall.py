@@ -129,9 +129,9 @@ def get_outstanding_sales_order_parts(
         "part",
     )
 
-    # Optionally exclude pending orders)
+    # Optionally exclude pending sales orders
     plugin = get_plugin()
-    exclude_pending_sales = plugin.get_setting("EXCLUDE_PENDING_SALES")
+    exclude_pending_sales = plugin.get_setting("EXCLUDE_PENDING_SALES_ORDERS")
 
     if exclude_pending_sales:
         sales_order_lines = sales_order_lines.exclude(
@@ -181,7 +181,7 @@ def get_outstanding_build_order_parts(
 
     from django.db.models import Q
     from build.models import BuildLine
-    from build.status_codes import BuildStatusGroups
+    from build.status_codes import BuildStatus, BuildStatusGroups
 
     # Find all open build order line items which are not completed
     # Here we are interested in the "deficit" quantity for each line item
@@ -194,6 +194,13 @@ def get_outstanding_build_order_parts(
     ).prefetch_related(
         "bom_item__sub_part",
     )
+
+    # Optionally exclude pending build orders
+    plugin = get_plugin()
+    exclude_pending_builds = plugin.get_setting("EXCLUDE_PENDING_BUILD_ORDERS")
+
+    if exclude_pending_builds:
+        build_order_lines = build_order_lines.exclude(build__status=BuildStatus.PENDING)
 
     # Exclude build orders whose target date lies beyond the horizon (undated builds are always included)
     if horizon_date:

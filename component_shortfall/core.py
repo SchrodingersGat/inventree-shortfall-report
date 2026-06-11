@@ -47,8 +47,14 @@ class ComponentShortfall(
             "default": True,
             "validator": bool,
         },
-        "EXCLUDE_PENDING_SALES": {
-            "name": "Exclude Pending Sales",
+        "EXCLUDE_PENDING_BUILD_ORDERS": {
+            "name": "Exclude Pending Build Orders",
+            "description": "Exclude build orders with pending status from shortfall calculations",
+            "default": False,
+            "validator": bool,
+        },
+        "EXCLUDE_PENDING_SALES_ORDERS": {
+            "name": "Exclude Pending Sales Orders",
             "description": "Exclude sales orders with pending status from shortfall calculations",
             "default": False,
             "validator": bool,
