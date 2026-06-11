@@ -20,7 +20,7 @@ from dateutil.relativedelta import relativedelta
 from django.core.files.base import ContentFile
 from django.db.models import F
 
-from InvenTree.helpers import normalize
+from InvenTree.helpers import current_time, normalize
 from InvenTree.helpers_model import construct_absolute_url
 
 import io
@@ -261,25 +261,59 @@ def record_shortfall_parameters(requirements: dict, parameter_template_id: int) 
 
     shortfall_ids = set()
 
+    to_create = []
+    to_update = []
+
+    now = current_time()
+
     for _, data in requirements.items():
         part = data["part"]
+
         shortfall = data.get("shortfall", Decimal(0))
 
-        if shortfall > 0:
-            # Ignore locked parts (for now)
-            if part.locked:
-                continue
+        if shortfall <= 0:
+            continue
 
-            common_models.Parameter.objects.update_or_create(
-                model_type=content_type,
-                model_id=part.pk,
-                template=template,
-                defaults={"data": str(normalize(shortfall))},
+        shortfall = str(normalize(data.get("shortfall", Decimal(0))))
+
+        shortfall_ids.add(part.pk)
+
+        # Check if the parameter already exists for this part
+        if parameter := part.parameters_list.filter(template=template).first():
+            parameter.data = shortfall
+            to_update.append(parameter)
+        else:
+            to_create.append(
+                common_models.Parameter(
+                    model_type=content_type,
+                    model_id=part.pk,
+                    template=template,
+                    data=shortfall,
+                    updated=now,
+                )
             )
 
-            shortfall_ids.add(part.pk)
+    if to_create:
+        print(f"Creating new shortfall parameters for {len(to_create)} parts")
+        common_models.Parameter.objects.bulk_create(to_create, batch_size=250)
 
-    # TODO: Remove any "shortfall" parameters for parts which are no longer in shortfall - we can identify these as any parameters which exist for this template, but whose part ID is not in the shortfall_ids set
+    if to_update:
+        print(f"Updating shortfall parameters for {len(to_update)} parts")
+        common_models.Parameter.objects.bulk_update(to_update, ["data"], batch_size=250)
+
+    # Remove any "shortfall" parameters for parts which are no longer in shortfall
+    excluded_pks = list(shortfall_ids)
+
+    to_delete = common_models.Parameter.objects.filter(
+        template=template,
+        model_type=content_type,
+    ).exclude(model_id__in=excluded_pks)
+
+    if to_delete.exists():
+        print(
+            f"Deleting {to_delete.count()} shortfall parameters for parts no longer in shortfall"
+        )
+        # to_delete.delete()
 
 
 def calculate_shortfall(
