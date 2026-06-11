@@ -47,6 +47,12 @@ class ComponentShortfall(
             "default": True,
             "validator": bool,
         },
+        "EXCLUDE_PENDING_SALES": {
+            "name": "Exclude Pending Sales",
+            "description": "Exclude sales orders with pending status from shortfall calculations",
+            "default": False,
+            "validator": bool,
+        },
         "SHORTFALL_REPORT_DAYS": {
             "name": "Shortfall Report Days",
             "description": "Number of days between automatic shortfall report generation (set to 0 to disable)",
@@ -180,7 +186,9 @@ class ComponentShortfall(
         horizon_months = int(self.get_setting("SHORTFALL_HORIZON_MONTHS"))
 
         # Calculate shortfall report with default settings
-        requirements = calculate_shortfall(data_output.pk, horizon_months=horizon_months)
+        requirements = calculate_shortfall(
+            data_output.pk, horizon_months=horizon_months
+        )
 
         data_output.refresh_from_db()
 
