@@ -35,6 +35,8 @@ pip install -U inventree-component-shortfall
 | Setting | Description |
 | --- | --- |
 | Hide No Shortfall | Omit components with zero shortfall from the report (default: enabled) |
+| Exclude Pending Build Orders | Exclude build orders with *pending* status from shortfall calculations (default: disabled) |
+| Exclude Pending Sales Orders | Exclude sales orders with *pending* status from shortfall calculations (default: disabled) |
 | Shortfall Report Days | How often (in days) the scheduled report runs; set to `0` to disable (default: 7) |
 | Shortfall Report Group | User group that receives periodic email reports |
 | Shortfall Horizon (Months) | Only consider orders due within this many months; orders with no due date are always included; set to `0` for no limit (default: 12) |

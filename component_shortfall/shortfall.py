@@ -34,6 +34,14 @@ import part.models as part_models
 logger = structlog.get_logger("inventree.shortfall_report")
 
 
+def get_plugin():
+    """Return the plugin instance for this plugin."""
+
+    from plugin import registry
+
+    return registry.get_plugin("component-shortfall")
+
+
 def update_part_requirements(
     part, required_qty: Decimal, component_data: dict
 ) -> Decimal:
@@ -111,7 +119,7 @@ def get_outstanding_sales_order_parts(
 
     from django.db.models import Q
     from order.models import SalesOrderLineItem
-    from order.status_codes import SalesOrderStatusGroups
+    from order.status_codes import SalesOrderStatus, SalesOrderStatusGroups
 
     # Find all open sales order line items which are not completed
     sales_order_lines = SalesOrderLineItem.objects.filter(
@@ -122,7 +130,14 @@ def get_outstanding_sales_order_parts(
         "part",
     )
 
-    # TODO: Filter by order status (e.g. exclude pending orders)
+    # Optionally exclude pending sales orders
+    plugin = get_plugin()
+    exclude_pending_sales = plugin.get_setting("EXCLUDE_PENDING_SALES_ORDERS")
+
+    if exclude_pending_sales:
+        sales_order_lines = sales_order_lines.exclude(
+            order__status=SalesOrderStatus.PENDING
+        )
 
     # Exclude orders whose target date lies beyond the horizon (undated orders are always included)
     if horizon_date:
@@ -167,7 +182,7 @@ def get_outstanding_build_order_parts(
 
     from django.db.models import Q
     from build.models import BuildLine
-    from build.status_codes import BuildStatusGroups
+    from build.status_codes import BuildStatus, BuildStatusGroups
 
     # Find all open build order line items which are not completed
     # Here we are interested in the "deficit" quantity for each line item
@@ -180,6 +195,13 @@ def get_outstanding_build_order_parts(
     ).prefetch_related(
         "bom_item__sub_part",
     )
+
+    # Optionally exclude pending build orders
+    plugin = get_plugin()
+    exclude_pending_builds = plugin.get_setting("EXCLUDE_PENDING_BUILD_ORDERS")
+
+    if exclude_pending_builds:
+        build_order_lines = build_order_lines.exclude(build__status=BuildStatus.PENDING)
 
     # Exclude build orders whose target date lies beyond the horizon (undated builds are always included)
     if horizon_date:

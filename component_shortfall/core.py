@@ -47,6 +47,18 @@ class ComponentShortfall(
             "default": True,
             "validator": bool,
         },
+        "EXCLUDE_PENDING_BUILD_ORDERS": {
+            "name": "Exclude Pending Build Orders",
+            "description": "Exclude build orders with pending status from shortfall calculations",
+            "default": False,
+            "validator": bool,
+        },
+        "EXCLUDE_PENDING_SALES_ORDERS": {
+            "name": "Exclude Pending Sales Orders",
+            "description": "Exclude sales orders with pending status from shortfall calculations",
+            "default": False,
+            "validator": bool,
+        },
         "SHORTFALL_REPORT_DAYS": {
             "name": "Shortfall Report Days",
             "description": "Number of days between automatic shortfall report generation (set to 0 to disable)",
