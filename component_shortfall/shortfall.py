@@ -18,7 +18,8 @@ import structlog
 from dateutil.relativedelta import relativedelta
 
 from django.core.files.base import ContentFile
-from django.db.models import F
+from django.db.models import DecimalField, F, Sum
+from django.db.models.functions import Coalesce
 
 from InvenTree.helpers import current_time, normalize
 from InvenTree.helpers_model import construct_absolute_url
@@ -63,7 +64,27 @@ def update_part_requirements(
 
     # Fetch (or calculate) the various stock values for this part
     if "stock" not in requirements:
-        requirements["stock"] = part.get_stock_count(include_variants=False)
+
+        stock_items = part.stock_entries(
+            in_stock=True,
+            include_variants=False
+        )
+
+        # TODO: Extend filtering of this query, e.g. exclude certain locations, or stock items with certain parameters?
+
+        result = stock_items.aggregate(
+            total=Coalesce(Sum("quantity", output_field=DecimalField()), Decimal(0))
+        )
+
+        requirements["stock"] = result["total"]
+
+        # Separately, calculate the "external" stock quantity
+        external_stock = stock_items.filter(location__external=True)
+        result = external_stock.aggregate(
+            total=Coalesce(Sum("quantity", output_field=DecimalField()), Decimal(0))
+        )
+
+        requirements["external_stock"] = result["total"]
 
     # TODO: What about BOM items which allow variants???
     # TODO: What about BOM substitutes?
@@ -487,6 +508,7 @@ def calculate_shortfall(
         "Purchaseable",
         "Category",
         "Current Stock",
+        "External Stock",
         "On Order",
         "In Production",
         "Required Quantity",
@@ -522,6 +544,7 @@ def calculate_shortfall(
             part.purchaseable,
             part.category.pathstring if part.category else None,
             Decimal(data["stock"]),
+            Decimal(data["external_stock"]),
             Decimal(data["on_order"]),
             Decimal(data["in_production"]),
             Decimal(data["required"]),
