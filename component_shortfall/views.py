@@ -13,7 +13,7 @@ from InvenTree.tasks import offload_task
 
 from common.models import DataOutput
 from .serializers import ShortfallReportSerializer
-from .shortfall import calculate_shortfall
+from .shortfall import calculate_shortfall, get_plugin
 
 
 class ShortfallReportView(CreateAPI):
@@ -24,6 +24,13 @@ class ShortfallReportView(CreateAPI):
 
     def post(self, request, *args, **kwargs):
         """Handle POST requests to generate a shortfall report."""
+
+        plugin = get_plugin()
+
+        if not plugin:
+            return Response({"error": "Plugin not found"}, status=404)
+
+        include_supplier_data = bool(plugin.get_setting("INCLUDE_SUPPLIER_DATA"))
 
         # Validate the incoming request data using the serializer
         serializer = ShortfallReportSerializer(data=request.data)
@@ -58,6 +65,7 @@ class ShortfallReportView(CreateAPI):
             horizon_months=horizon_months,
             include_build_orders=include_build_orders,
             include_sales_orders=include_sales_orders,
+            include_supplier_data=include_supplier_data,
             group="shortfall_report",
         )
 

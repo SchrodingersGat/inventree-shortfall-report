@@ -346,6 +346,7 @@ def calculate_shortfall(
     horizon_months: int = 12,
     include_build_orders: bool = True,
     include_sales_orders: bool = True,
+    include_supplier_data: bool = False,
     parameter_template_id: Optional[int] = None,
 ) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
@@ -358,6 +359,7 @@ def calculate_shortfall(
         horizon_months: Only consider orders due within this many months; 0 means no limit (default: 12)
         include_build_orders: Whether to include build orders in the calculation (default: True)
         include_sales_orders: Whether to include sales orders in the calculation (default: True)
+        include_supplier_data: Whether to include supplier information in the shortfall report (default: False)
         parameter_template_id: Optional ID of a ParameterTemplate to record shortfall values against
 
     Returns:
@@ -477,9 +479,12 @@ def calculate_shortfall(
     # Generate the output data file
     wb = Workbook()
     ws = wb.active
-    ws.append([
+
+    cols = [
         "Part Name",
         "Part IPN",
+        "Assembly",
+        "Purchaseable",
         "Category",
         "Current Stock",
         "On Order",
@@ -487,7 +492,14 @@ def calculate_shortfall(
         "Required Quantity",
         "Shortfall",
         "Units",
-    ])
+    ]
+
+    if include_supplier_data:
+        cols.extend([
+            "Suppliers"
+        ])
+
+    ws.append(cols)
 
     hyperlink_font = Font(color="0563C1", underline="single")
 
@@ -503,9 +515,11 @@ def calculate_shortfall(
         if hide_no_shortfall and shortfall <= 0:
             continue
 
-        ws.append([
+        data = [
             part.name,
             part.IPN,
+            part.assembly,
+            part.purchaseable,
             part.category.pathstring if part.category else None,
             Decimal(data["stock"]),
             Decimal(data["on_order"]),
@@ -513,7 +527,14 @@ def calculate_shortfall(
             Decimal(data["required"]),
             Decimal(data["shortfall"]),
             part.units,
-        ])
+        ]
+
+        if include_supplier_data:
+            suppliers = list(part.supplier_parts.all().values_list("supplier__name", flat=True).distinct())
+            suppliers = sorted(suppliers)  # Sort supplier names alphabetically
+            data.append(", ".join(suppliers))
+
+        ws.append(data)
 
         # Generate link for the part
         cell = ws.cell(row=ws.max_row, column=1)
@@ -522,7 +543,7 @@ def calculate_shortfall(
 
         # Generate link for the category
         if part.category:
-            cell = ws.cell(row=ws.max_row, column=3)
+            cell = ws.cell(row=ws.max_row, column=5)
             cell.hyperlink = construct_absolute_url(part.category.get_absolute_url())
             cell.font = hyperlink_font
 

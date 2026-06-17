@@ -82,6 +82,12 @@ class ComponentShortfall(
             "description": "Parameter template for recording shortfall against parts",
             "model": "common.parametertemplate",
         },
+        "INCLUDE_SUPPLIER_DATA": {
+            "name": "Include Supplier Data",
+            "description": "Include supplier information in the shortfall report",
+            "default": False,
+            "validator": bool,
+        }
     }
 
     # Custom URL endpoints (from UrlsMixin)
@@ -196,12 +202,14 @@ class ComponentShortfall(
         hide_no_shortfall = self.get_setting("HIDE_NO_SHORTFALL")
         horizon_months = int(self.get_setting("SHORTFALL_HORIZON_MONTHS"))
         parameter_template_id = self.get_setting("SHORTFALL_PARAMETER_TEMPLATE") or None
+        include_supplier_data = bool(self.get_setting("INCLUDE_SUPPLIER_DATA"))
 
         # Calculate shortfall report with default settings
         requirements = calculate_shortfall(
             data_output.pk,
             horizon_months=horizon_months,
             parameter_template_id=parameter_template_id,
+            include_supplier_data=include_supplier_data,
         )
 
         data_output.refresh_from_db()
