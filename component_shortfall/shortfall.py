@@ -530,7 +530,8 @@ def calculate_shortfall(
         ]
 
         if include_supplier_data:
-            suppliers = part.supplier_parts.all().values_list("supplier__name", flat=True).distinct()
+            suppliers = list(part.supplier_parts.all().values_list("supplier__name", flat=True).distinct())
+            suppliers = sorted(suppliers)  # Sort supplier names alphabetically
             data.append(", ".join(suppliers))
 
         ws.append(data)
@@ -542,7 +543,7 @@ def calculate_shortfall(
 
         # Generate link for the category
         if part.category:
-            cell = ws.cell(row=ws.max_row, column=3)
+            cell = ws.cell(row=ws.max_row, column=5)
             cell.hyperlink = construct_absolute_url(part.category.get_absolute_url())
             cell.font = hyperlink_font
 
