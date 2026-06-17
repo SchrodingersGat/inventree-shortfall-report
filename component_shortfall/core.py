@@ -82,6 +82,12 @@ class ComponentShortfall(
             "description": "Parameter template for recording shortfall against parts",
             "model": "common.parametertemplate",
         },
+        "INCLUDE_SUPPLIER_DATA": {
+            "name": "Include Supplier Data",
+            "description": "Include supplier information in the shortfall report",
+            "default": False,
+            "validator": bool,
+        }
     }
 
     # Custom URL endpoints (from UrlsMixin)
