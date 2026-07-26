@@ -52,3 +52,13 @@ exclude = [
 ]
 
 src=["component_shortfall"]
+
+[tool.ruff.lint]
+ignore = [
+    # RUF012 - Mutable default value for class attribute.
+    # Flags idiomatic Django/DRF patterns (permission_classes, plugin SETTINGS/
+    # SCHEDULED_TASKS dicts) that are never mutated per-instance. Also ignored
+    # in inventree-stock-forecasting's config, and in the main InvenTree repo's
+    # ruff config, for the same reason.
+    "RUF012",
+]

@@ -9,11 +9,12 @@ Process Goals:
 
 """
 
+from __future__ import annotations
+
 import io
 import os
 from datetime import date
 from decimal import Decimal
-from typing import Optional
 
 import common.models as common_models
 import part.models as part_models
@@ -22,7 +23,7 @@ from dateutil.relativedelta import relativedelta
 from django.core.files.base import ContentFile
 from django.db.models import DecimalField, F, Sum
 from django.db.models.functions import Coalesce
-from InvenTree.helpers import current_time, normalize
+from InvenTree.helpers import current_date, current_time, normalize
 from InvenTree.helpers_model import construct_absolute_url
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -59,11 +60,7 @@ def update_part_requirements(
 
     # Fetch (or calculate) the various stock values for this part
     if "stock" not in requirements:
-
-        stock_items = part.stock_entries(
-            in_stock=True,
-            include_variants=False
-        )
+        stock_items = part.stock_entries(in_stock=True, include_variants=False)
 
         # TODO: Extend filtering of this query, e.g. exclude certain locations, or stock items with certain parameters?
 
@@ -118,7 +115,7 @@ def update_part_requirements(
 
 
 def get_outstanding_sales_order_parts(
-    horizon_date: Optional[date] = None,
+    horizon_date: date | None = None,
 ) -> dict:
     """Return a dict of outstanding parts (based on open sales orders).
 
@@ -181,7 +178,7 @@ def get_outstanding_sales_order_parts(
 
 
 def get_outstanding_build_order_parts(
-    horizon_date: Optional[date] = None,
+    horizon_date: date | None = None,
 ) -> dict:
     """Return a dict of outstanding parts (based on open build orders).
 
@@ -247,7 +244,7 @@ def get_outstanding_build_order_parts(
 
 
 def get_outstanding_parts(
-    horizon_date: Optional[date] = None,
+    horizon_date: date | None = None,
     include_build_orders: bool = True,
     include_sales_orders: bool = True,
 ) -> dict:
@@ -304,7 +301,7 @@ def record_shortfall_parameters(requirements: dict, parameter_template_id: int) 
 
     now = current_time()
 
-    for _, data in requirements.items():
+    for data in requirements.values():
         part = data["part"]
 
         shortfall = data.get("shortfall", Decimal(0))
@@ -356,14 +353,14 @@ def record_shortfall_parameters(requirements: dict, parameter_template_id: int) 
 
 def calculate_shortfall(
     output_id: int,
-    category_id: Optional[int] = None,
+    category_id: int | None = None,
     max_bom_depth: int = 50,
     hide_no_shortfall: bool = True,
     horizon_months: int = 12,
     include_build_orders: bool = True,
     include_sales_orders: bool = True,
     include_supplier_data: bool = False,
-    parameter_template_id: Optional[int] = None,
+    parameter_template_id: int | None = None,
 ) -> dict:
     """Calculate the component shortfall for a given list of component IDs.
 
@@ -413,7 +410,7 @@ def calculate_shortfall(
             )
 
     horizon_date = (
-        date.today() + relativedelta(months=horizon_months)
+        current_date() + relativedelta(months=horizon_months)
         if horizon_months > 0
         else None
     )
@@ -439,7 +436,7 @@ def calculate_shortfall(
     components_to_process = []
 
     # Start with the initial set of outstanding parts
-    for _, data in initial_parts.items():
+    for data in initial_parts.values():
         part = data["part"]
         required_qty = data["required"]
 
@@ -512,15 +509,13 @@ def calculate_shortfall(
     ]
 
     if include_supplier_data:
-        cols.extend([
-            "Suppliers"
-        ])
+        cols.extend(["Suppliers"])
 
     ws.append(cols)
 
     hyperlink_font = Font(color="0563C1", underline="single")
 
-    for _, data in requirements.items():
+    for data in requirements.values():
         part = data["part"]
 
         # If category filtering is enabled, and this part does not belong to the selected category (or its descendants), then skip this part
@@ -548,7 +543,11 @@ def calculate_shortfall(
         ]
 
         if include_supplier_data:
-            suppliers = list(part.supplier_parts.all().values_list("supplier__name", flat=True).distinct())
+            suppliers = list(
+                part.supplier_parts.all()
+                .values_list("supplier__name", flat=True)
+                .distinct()
+            )
             suppliers = sorted(suppliers)  # Sort supplier names alphabetically
             data.append(", ".join(suppliers))
 
@@ -606,10 +605,12 @@ def format_shortfall_report_html(
         if hide_no_shortfall and entry.get("shortfall", 0) <= 0:
             continue
 
-        requirements_list.append({
-            **entry,
-            "part_url": construct_absolute_url(entry["part"].get_absolute_url()),
-        })
+        requirements_list.append(
+            {
+                **entry,
+                "part_url": construct_absolute_url(entry["part"].get_absolute_url()),
+            }
+        )
 
     context_data["requirements"] = requirements_list
 

@@ -19,8 +19,11 @@ class ShortfallReportSerializer(serializers.Serializer):
         super().__init__(*args, **kwargs)
 
         from plugin.registry import registry
+
         plugin = registry.get_plugin("component-shortfall")
-        default_horizon = int(plugin.get_setting("SHORTFALL_HORIZON_MONTHS")) if plugin else 12
+        default_horizon = (
+            int(plugin.get_setting("SHORTFALL_HORIZON_MONTHS")) if plugin else 12
+        )
         self.fields["horizon_months"].default = default_horizon
 
     category = serializers.PrimaryKeyRelatedField(
@@ -50,7 +53,9 @@ class ShortfallReportSerializer(serializers.Serializer):
         required=False,
         min_value=0,
         label=_("Horizon (Months)"),
-        help_text=_("Only consider orders due within this many months (0 = no limit); defaults to the plugin setting"),
+        help_text=_(
+            "Only consider orders due within this many months (0 = no limit); defaults to the plugin setting"
+        ),
     )
 
     include_build_orders = serializers.BooleanField(

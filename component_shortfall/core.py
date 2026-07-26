@@ -1,5 +1,7 @@
 """Generate component shortfall reports"""
 
+from __future__ import annotations
+
 import structlog
 from django.contrib.auth.models import Group
 from plugin import InvenTreePlugin
@@ -84,7 +86,7 @@ class ComponentShortfall(
             "description": "Include supplier information in the shortfall report",
             "default": False,
             "validator": bool,
-        }
+        },
     }
 
     # Custom URL endpoints (from UrlsMixin)
@@ -115,21 +117,24 @@ class ComponentShortfall(
             return []
 
         # Only display for users in the selected group
-        if group := self.get_plugin_group():
-            if not request.user.groups.filter(pk=group.pk).exists():
-                return []
+        if (group := self.get_plugin_group()) and not request.user.groups.filter(
+            pk=group.pk
+        ).exists():
+            return []
 
         items = []
 
-        items.append({
-            "key": "component-shortfall-dashboard",
-            "title": "Shortfall Report",
-            "description": "Generate a component shortfall report",
-            "icon": "ti:clipboard-check:outline",
-            "source": self.plugin_static_file(
-                "Dashboard.js:renderComponentShortfallDashboardItem"
-            ),
-        })
+        items.append(
+            {
+                "key": "component-shortfall-dashboard",
+                "title": "Shortfall Report",
+                "description": "Generate a component shortfall report",
+                "icon": "ti:clipboard-check:outline",
+                "source": self.plugin_static_file(
+                    "Dashboard.js:renderComponentShortfallDashboardItem"
+                ),
+            }
+        )
 
         return items
 
@@ -221,9 +226,10 @@ class ComponentShortfall(
         recipients = []
 
         for user in users:
-            if email := InvenTree.helpers_email.get_email_for_user(user):
-                if email not in recipients:
-                    recipients.append(email)
+            if (
+                email := InvenTree.helpers_email.get_email_for_user(user)
+            ) and email not in recipients:
+                recipients.append(email)
 
         # Construct the email body
         body = format_shortfall_report_html(
