@@ -6,15 +6,21 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: @lingui/cli\n"
 "Language: pseudo-LOCALE\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Plural-Forms: \n"
 
-#: src/Panel.tsx:104
-msgid "Translated text, provided by custom code!"
-msgstr ""
+#: src/Panel.tsx
+#~ msgid "Translated text, provided by custom code!"
+#~ msgstr ""
 
-#: src/Panel.tsx:105
-msgid "Translations are loaded automatically."
-msgstr ""
+#: src/Panel.tsx
+#~ msgid "Translations are loaded automatically."
+#~ msgstr ""
 
-#: src/Panel.tsx:106
-msgid "Fallback locale is used if no translation is available"
-msgstr ""
+#: src/Panel.tsx
+#~ msgid "Fallback locale is used if no translation is available"
+#~ msgstr ""
