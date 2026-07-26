@@ -314,17 +314,22 @@ def record_shortfall_parameters(requirements: dict, parameter_template_id: int) 
         # Check if the parameter already exists for this part
         if parameter := part.parameters_list.filter(template=template).first():
             parameter.data = shortfall
+            # bulk_update() bypasses Parameter.save(), so data_numeric must be
+            # recalculated explicitly here - otherwise it's left stale, breaking
+            # any numeric sort/filter against this parameter.
+            parameter.calculate_numeric_value()
             to_update.append(parameter)
         else:
-            to_create.append(
-                common_models.Parameter(
-                    model_type=content_type,
-                    model_id=part.pk,
-                    template=template,
-                    data=shortfall,
-                    updated=now,
-                )
+            parameter = common_models.Parameter(
+                model_type=content_type,
+                model_id=part.pk,
+                template=template,
+                data=shortfall,
+                updated=now,
             )
+            # bulk_create() likewise bypasses Parameter.save().
+            parameter.calculate_numeric_value()
+            to_create.append(parameter)
 
     if to_create:
         print(f"Creating new shortfall parameters for {len(to_create)} parts")
@@ -332,7 +337,9 @@ def record_shortfall_parameters(requirements: dict, parameter_template_id: int) 
 
     if to_update:
         print(f"Updating shortfall parameters for {len(to_update)} parts")
-        common_models.Parameter.objects.bulk_update(to_update, ["data"], batch_size=250)
+        common_models.Parameter.objects.bulk_update(
+            to_update, ["data", "data_numeric"], batch_size=250
+        )
 
     # Remove any "shortfall" parameters for parts which are no longer in shortfall
     excluded_pks = list(shortfall_ids)

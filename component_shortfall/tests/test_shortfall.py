@@ -405,15 +405,22 @@ class RecordShortfallParametersTests(ShortfallTestCase):
             template=self.template,
         )
         self.assertEqual(param.data, '15')
+        # Regression test for GH #59: bulk_create() bypasses Parameter.save(),
+        # which is what normally keeps data_numeric in sync with data.
+        self.assertEqual(param.data_numeric, 15.0)
 
     def test_updates_existing_parameter(self):
         """An existing Parameter value is updated in-place."""
-        Parameter.objects.create(
+        existing = Parameter.objects.create(
             model_type=ContentType.objects.get_for_model(Part),
             model_id=self.component.pk,
             template=self.template,
             data='5',
         )
+        # Parameter.save() (used by .create()) already sets this correctly -
+        # reset it to None to prove the *update* path (bulk_update) is what
+        # fixes it, not something left over from creation.
+        Parameter.objects.filter(pk=existing.pk).update(data_numeric=None)
 
         requirements = {
             self.component.pk: {'part': self.component, 'shortfall': Decimal(25)}
@@ -426,6 +433,43 @@ class RecordShortfallParametersTests(ShortfallTestCase):
             template=self.template,
         )
         self.assertEqual(param.data, '25')
+        # Regression test for GH #59: bulk_update() bypasses Parameter.save()
+        # too, so data_numeric must be explicitly included and recalculated.
+        self.assertEqual(param.data_numeric, 25.0)
+
+    def test_data_numeric_respects_template_units(self):
+        """When the parameter template has units, data_numeric is computed via the same unit-conversion path Parameter.save() itself uses."""
+        template_with_units = ParameterTemplate.objects.create(
+            name='Shortfall (kg)',
+            model_type=ContentType.objects.get_for_model(Part),
+            units='kg',
+        )
+
+        requirements = {
+            self.component.pk: {'part': self.component, 'shortfall': Decimal(2)}
+        }
+        shortfall.record_shortfall_parameters(
+            requirements, template_with_units.pk
+        )
+
+        param = Parameter.objects.get(
+            model_type=ContentType.objects.get_for_model(Part),
+            model_id=self.component.pk,
+            template=template_with_units,
+        )
+
+        # Compare against a Parameter saved the "normal" way (via .save()),
+        # rather than hardcoding an assumption about unit-conversion semantics
+        # that belong to core InvenTree, not this plugin.
+        reference = Parameter(
+            model_type=ContentType.objects.get_for_model(Part),
+            model_id=self.component.pk,
+            template=template_with_units,
+            data='2',
+        )
+        reference.calculate_numeric_value()
+
+        self.assertEqual(param.data_numeric, reference.data_numeric)
 
     def test_removes_parameter_when_no_longer_in_shortfall(self):
         """An existing Parameter is deleted once the part is no longer in shortfall."""
