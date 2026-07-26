@@ -9,28 +9,23 @@ Process Goals:
 
 """
 
-from typing import Optional
-from decimal import Decimal
-from datetime import date
-import os
-import structlog
-
-from dateutil.relativedelta import relativedelta
-
-from django.core.files.base import ContentFile
-from django.db.models import DecimalField, F, Sum
-from django.db.models.functions import Coalesce
-
-from InvenTree.helpers import current_time, normalize
-from InvenTree.helpers_model import construct_absolute_url
-
 import io
-from openpyxl import Workbook
-from openpyxl.styles import Font
+import os
+from datetime import date
+from decimal import Decimal
+from typing import Optional
 
 import common.models as common_models
 import part.models as part_models
-
+import structlog
+from dateutil.relativedelta import relativedelta
+from django.core.files.base import ContentFile
+from django.db.models import DecimalField, F, Sum
+from django.db.models.functions import Coalesce
+from InvenTree.helpers import current_time, normalize
+from InvenTree.helpers_model import construct_absolute_url
+from openpyxl import Workbook
+from openpyxl.styles import Font
 
 logger = structlog.get_logger("inventree.shortfall_report")
 
@@ -201,9 +196,9 @@ def get_outstanding_build_order_parts(
         - horizon_date: Optional cutoff date; build orders with a target date beyond this are excluded
     """
 
-    from django.db.models import Q
     from build.models import BuildLine
     from build.status_codes import BuildStatus, BuildStatusGroups
+    from django.db.models import Q
 
     # Find all open build order line items which are not completed
     # Here we are interested in the "deficit" quantity for each line item
@@ -586,7 +581,7 @@ def format_shortfall_report_html(
 ) -> str:
     """Format the shortfall report as a HTML document."""
 
-    from django.template import Template, Context
+    from django.template import Context, Template
 
     file_path = os.path.join(
         os.path.dirname(__file__),

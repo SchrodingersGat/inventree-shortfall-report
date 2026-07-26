@@ -5,13 +5,12 @@ In practice, you would define your custom views here.
 Ref: https://www.django-rest-framework.org/api-guide/views/
 """
 
+from common.models import DataOutput
+from InvenTree.mixins import CreateAPI
+from InvenTree.tasks import offload_task
 from rest_framework import permissions
 from rest_framework.response import Response
 
-from InvenTree.mixins import CreateAPI
-from InvenTree.tasks import offload_task
-
-from common.models import DataOutput
 from .serializers import ShortfallReportSerializer
 from .shortfall import calculate_shortfall, get_plugin
 

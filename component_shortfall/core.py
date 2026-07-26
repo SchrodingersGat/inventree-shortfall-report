@@ -1,14 +1,11 @@
 """Generate component shortfall reports"""
 
 import structlog
-
 from django.contrib.auth.models import Group
-
 from plugin import InvenTreePlugin
 from plugin.mixins import ScheduleMixin, SettingsMixin, UrlsMixin, UserInterfaceMixin
 
 from . import PLUGIN_VERSION
-
 
 logger = structlog.get_logger("inventree.shortfall_report")
 
@@ -95,6 +92,7 @@ class ComponentShortfall(
     def setup_urls(self):
         """Configure custom URL endpoints for this plugin."""
         from django.urls import path
+
         from .views import ShortfallReportView
 
         return [
@@ -174,6 +172,7 @@ class ComponentShortfall(
         import InvenTree.helpers_email
         import InvenTree.tasks
         from common.models import DataOutput
+
         from .shortfall import calculate_shortfall, format_shortfall_report_html
 
         report_period = int(self.get_setting("SHORTFALL_REPORT_DAYS"))

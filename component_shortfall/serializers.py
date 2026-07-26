@@ -5,11 +5,10 @@ In practice, you would define your custom serializers here.
 Ref: https://www.django-rest-framework.org/api-guide/serializers/
 """
 
-from django.utils.translation import gettext_lazy as _
-from rest_framework import serializers
-
 import common.serializers
 import part.models as part_models
+from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
 
 
 class ShortfallReportSerializer(serializers.Serializer):
