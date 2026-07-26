@@ -241,6 +241,21 @@ class OutstandingBuildOrderPartsTests(ShortfallTestCase):
         outstanding = shortfall.get_outstanding_build_order_parts()
         self.assertNotIn(self.component.pk, outstanding)
 
+    def test_virtual_sub_part_excluded(self):
+        """A virtual sub-part referenced by an active build's BuildLine does not contribute a requirement.
+
+        Regression test: virtual sub-parts were already excluded when reached via
+        BOM traversal in `calculate_shortfall` (`get_bom_items(include_virtual=False)`),
+        but not when directly referenced by a BuildLine here - an inconsistency.
+        """
+        self.component.virtual = True
+        self.component.save()
+
+        self.create_build(quantity=10)
+
+        outstanding = shortfall.get_outstanding_build_order_parts()
+        self.assertNotIn(self.component.pk, outstanding)
+
     def test_pending_build_excluded_when_setting_enabled(self):
         """Pending build orders are excluded when EXCLUDE_PENDING_BUILD_ORDERS is set."""
         self.create_build(quantity=10, status=BuildStatus.PENDING)
