@@ -286,6 +286,20 @@ class DatedEventCollectionTests(ShortfallDateFixtureTestCase):
         events = shortfall.get_dated_demand_events([self.bottom.pk])
         self.assertEqual(events[self.bottom.pk], [(TODAY, Decimal(-5))])
 
+    def test_build_line_consumption_is_a_dated_demand_event(self):
+        """An active build order's remaining BOM consumption is a dated demand event for the sub-part."""
+        Build.objects.create(
+            part=self.top,
+            quantity=10,
+            completed=4,
+            reference='BO-CONSUME',
+            target_date=IN_10_DAYS,
+        )
+
+        events = shortfall.get_dated_demand_events([self.mid.pk])
+        # TOP's BOM requires 1x MID per TOP; 10 - 4 = 6 remaining -> 6x MID needed
+        self.assertEqual(events[self.mid.pk], [(IN_10_DAYS, Decimal(-6))])
+
     def test_line_target_date_takes_precedence_over_order_target_date(self):
         """A line item's own target_date wins over the order's target_date when both are set."""
         so = SalesOrder.objects.create(

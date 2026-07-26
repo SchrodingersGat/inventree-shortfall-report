@@ -609,3 +609,76 @@ class CalculateShortfallTests(ShortfallTestCase):
         """An invalid output_id is handled gracefully, returning None without raising."""
         result = shortfall.calculate_shortfall(999999)
         self.assertIsNone(result)
+
+
+class FormatShortfallReportHtmlTests(CalculateShortfallTests):
+    """Tests for `format_shortfall_report_html` directly (the scheduled-email body)."""
+
+    def test_hide_no_shortfall_true_omits_zero_shortfall_entries(self):
+        """A zero-shortfall part is omitted from the HTML body when hide_no_shortfall=True."""
+        location = StockLocation.objects.create(name='Location')
+        StockItem.objects.create(part=self.assembly, quantity=1000, location=location)
+
+        so = SalesOrder.objects.create(customer=self.customer, reference='SO-0001')
+        SalesOrderLineItem.objects.create(order=so, part=self.assembly, quantity=10)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(
+            output.pk, hide_no_shortfall=False
+        )
+
+        html = shortfall.format_shortfall_report_html(
+            requirements, output, hide_no_shortfall=True
+        )
+        self.assertNotIn('Assembly', html)
+
+    def test_hide_no_shortfall_false_includes_zero_shortfall_entries(self):
+        """A zero-shortfall part is included in the HTML body when hide_no_shortfall=False."""
+        location = StockLocation.objects.create(name='Location')
+        StockItem.objects.create(part=self.assembly, quantity=1000, location=location)
+
+        so = SalesOrder.objects.create(customer=self.customer, reference='SO-0001')
+        SalesOrderLineItem.objects.create(order=so, part=self.assembly, quantity=10)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(
+            output.pk, hide_no_shortfall=False
+        )
+
+        html = shortfall.format_shortfall_report_html(
+            requirements, output, hide_no_shortfall=False
+        )
+        self.assertIn('Assembly', html)
+
+    def test_download_link_included_when_output_file_present(self):
+        """The email body includes a download link once the DataOutput has a generated file."""
+        so = SalesOrder.objects.create(customer=self.customer, reference='SO-0001')
+        SalesOrderLineItem.objects.create(order=so, part=self.assembly, quantity=10)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(
+            output.pk, hide_no_shortfall=False
+        )
+        output.refresh_from_db()
+
+        html = shortfall.format_shortfall_report_html(
+            requirements, output, hide_no_shortfall=False
+        )
+        self.assertIn('as an Excel file', html)
+
+    def test_download_link_omitted_when_no_output_file(self):
+        """The email body omits the download link entirely when the DataOutput has no file."""
+        so = SalesOrder.objects.create(customer=self.customer, reference='SO-0001')
+        SalesOrderLineItem.objects.create(order=so, part=self.assembly, quantity=10)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(
+            output.pk, hide_no_shortfall=False
+        )
+        # Use a fresh, never-completed DataOutput - has no attached file
+        empty_output = self.make_output()
+
+        html = shortfall.format_shortfall_report_html(
+            requirements, empty_output, hide_no_shortfall=False
+        )
+        self.assertNotIn('as an Excel file', html)
