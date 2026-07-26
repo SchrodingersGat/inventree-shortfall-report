@@ -247,3 +247,12 @@ class ShortfallReportAPITests(ShortfallReportAPITestCase):
             template=template,
         )
         self.assertEqual(param.data, '10')
+
+    def test_returns_404_when_plugin_not_found(self):
+        """A 404 is returned if the plugin instance cannot be resolved (defensive branch)."""
+        from unittest.mock import patch
+
+        with patch('component_shortfall.views.get_plugin', return_value=None):
+            response = self.post(self.url, data={}, expected_code=404)
+
+        self.assertEqual(response.data['error'], 'Plugin not found')

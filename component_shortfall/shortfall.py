@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import os
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
@@ -163,11 +164,8 @@ def get_outstanding_sales_order_parts(
     outstanding_parts = {}
 
     for line in sales_order_lines:
-        deficit = max(0, line.quantity - line.shipped)
-
-        if deficit <= 0:
-            # No outstanding quantity for this line item
-            continue
+        # The queryset already filters shipped__lt=quantity, so this is always > 0
+        deficit = line.quantity - line.shipped
 
         part_data = outstanding_parts.get(line.part.pk, None) or {
             "part": line.part,
@@ -228,11 +226,8 @@ def get_outstanding_build_order_parts(
     outstanding_parts = {}
 
     for line in build_order_lines:
-        deficit = max(0, line.quantity - line.consumed)
-
-        if deficit <= 0:
-            # No outstanding quantity for this line item
-            continue
+        # The queryset already filters consumed__lt=quantity, so this is always > 0
+        deficit = line.quantity - line.consumed
 
         part = line.bom_item.sub_part
 
@@ -354,6 +349,225 @@ def record_shortfall_parameters(requirements: dict, parameter_template_id: int) 
         to_delete.delete()
 
 
+def _resolve_event_date(*candidates: date | None) -> date:
+    """Return the first non-None date from the given candidates.
+
+    Falls back to today's date if every candidate is None - undated demand/supply
+    is treated as immediate, per the same convention as the rest of the plugin
+    (e.g. undated orders are never excluded by the horizon-date filter either).
+    """
+
+    for candidate in candidates:
+        if candidate is not None:
+            return candidate
+
+    return current_date()
+
+
+def find_shortfall_date(
+    current_balance: Decimal, dated_deltas: list[tuple[date, Decimal]]
+) -> date | None:
+    """Determine the first date at which a running stock balance goes negative.
+
+    Arguments:
+        current_balance: The stock balance on hand today (not including any
+            on-order/in-production/outstanding-demand quantity)
+        dated_deltas: A list of (date, quantity) tuples - positive for incoming
+            supply, negative for outgoing demand
+
+    Returns:
+        - Today's date, if `current_balance` is already negative
+        - The date of the first event which pushes the running balance negative
+        - None, if the balance is never projected to go negative
+    """
+
+    if current_balance < 0:
+        return current_date()
+
+    # Group deltas by date first, so that same-day events are always applied
+    # together - otherwise the arbitrary order two same-day events are processed
+    # in could incorrectly report a shortfall date where the net effect for that
+    # day is actually non-negative.
+    delta_by_date = defaultdict(Decimal)
+
+    for event_date, delta in dated_deltas:
+        delta_by_date[event_date] += delta
+
+    balance = current_balance
+
+    for event_date in sorted(delta_by_date):
+        balance += delta_by_date[event_date]
+
+        if balance < 0:
+            return event_date
+
+    return None
+
+
+def get_dated_demand_events(part_ids) -> dict[int, list[tuple[date, Decimal]]]:
+    """Return per-part lists of dated (date, -quantity) demand events.
+
+    Covers direct demand only (this part's own outstanding sales order lines,
+    and this part's own outstanding build-order consumption) - BOM-cascaded
+    demand from parent assemblies is layered on separately, since it depends on
+    the parent's own resolved shortfall date (see `compute_shortfall_dates`).
+    """
+
+    from build.models import BuildLine
+    from build.status_codes import BuildStatusGroups
+    from order.models import SalesOrderLineItem
+    from order.status_codes import SalesOrderStatusGroups
+
+    events = defaultdict(list)
+
+    sales_order_lines = SalesOrderLineItem.objects.filter(
+        order__status__in=SalesOrderStatusGroups.OPEN,
+        part__virtual=False,
+        shipped__lt=F("quantity"),
+        part_id__in=part_ids,
+    ).select_related("order")
+
+    for line in sales_order_lines:
+        deficit = line.quantity - line.shipped
+
+        if deficit <= 0:
+            continue
+
+        event_date = _resolve_event_date(line.target_date, line.order.target_date)
+        events[line.part_id].append((event_date, -deficit))
+
+    build_lines = BuildLine.objects.filter(
+        build__status__in=BuildStatusGroups.ACTIVE_CODES,
+        build__part__virtual=False,
+        bom_item__sub_part__virtual=False,
+        consumed__lt=F("quantity"),
+        bom_item__sub_part_id__in=part_ids,
+    ).select_related("build", "bom_item")
+
+    for line in build_lines:
+        deficit = line.quantity - line.consumed
+
+        if deficit <= 0:
+            continue
+
+        event_date = _resolve_event_date(line.build.target_date)
+        events[line.bom_item.sub_part_id].append((event_date, -deficit))
+
+    return events
+
+
+def get_dated_supply_events(part_ids) -> dict[int, list[tuple[date, Decimal]]]:
+    """Return per-part lists of dated (date, +quantity) supply events.
+
+    Covers direct supply only: this part's own outstanding purchase order
+    lines, and outputs of this part's own active build orders (if it is itself
+    an assembly being built).
+    """
+
+    from build.models import Build
+    from build.status_codes import BuildStatusGroups
+    from order.models import PurchaseOrderLineItem
+    from order.status_codes import PurchaseOrderStatusGroups
+
+    events = defaultdict(list)
+
+    purchase_order_lines = PurchaseOrderLineItem.objects.filter(
+        order__status__in=PurchaseOrderStatusGroups.OPEN,
+        part__part_id__in=part_ids,
+        quantity__gt=F("received"),
+    ).select_related("order", "part")
+
+    for line in purchase_order_lines:
+        remaining = line.quantity - line.received
+
+        if remaining <= 0:
+            continue
+
+        quantity = line.part.base_quantity(remaining)
+        event_date = _resolve_event_date(line.target_date, line.order.target_date)
+        events[line.part.part_id].append((event_date, quantity))
+
+    builds = Build.objects.filter(
+        status__in=BuildStatusGroups.ACTIVE_CODES,
+        part_id__in=part_ids,
+    )
+
+    for build in builds:
+        remaining = build.remaining
+
+        if remaining <= 0:
+            continue
+
+        event_date = _resolve_event_date(build.target_date)
+        events[build.part_id].append((event_date, remaining))
+
+    return events
+
+
+def compute_shortfall_dates(requirements: dict, cascade_edges: dict) -> dict:
+    """Compute the shortfall date for every part in `requirements`.
+
+    BOM-cascaded demand must be dated using the *parent's own* resolved
+    shortfall date (not "now") - so parents have to be fully resolved before
+    their children can be. `cascade_edges` (child part ID -> {parent part ID:
+    quantity contributed by that parent}) describes this dependency graph;
+    parts are processed in topological order (Kahn's algorithm) so that a
+    child is only resolved once every contributing parent already has a
+    result, regardless of how the BOM graph's path lengths vary.
+
+    Arguments:
+        requirements: The populated requirements dict from `calculate_shortfall`
+        cascade_edges: dict of {child_part_id: {parent_part_id: quantity}}
+
+    Returns:
+        A dict of {part_id: date | None} - None if that part's stock is never
+        projected to go negative given its currently known demand/supply.
+    """
+
+    part_ids = list(requirements.keys())
+
+    demand_events = get_dated_demand_events(part_ids)
+    supply_events = get_dated_supply_events(part_ids)
+
+    in_degree = {pk: len(cascade_edges.get(pk, {})) for pk in part_ids}
+
+    children_of = defaultdict(list)
+
+    for child_pk, parents in cascade_edges.items():
+        for parent_pk in parents:
+            children_of[parent_pk].append(child_pk)
+
+    shortfall_dates = {}
+    queue = [pk for pk in part_ids if in_degree.get(pk, 0) == 0]
+
+    while queue:
+        pk = queue.pop(0)
+
+        events = list(demand_events.get(pk, []))
+
+        # Layer in cascaded demand, dated using each contributing parent's own
+        # resolved shortfall date - a parent with no projected shortfall date
+        # contributes no cascaded demand event at all.
+        for parent_pk, quantity in cascade_edges.get(pk, {}).items():
+            parent_date = shortfall_dates.get(parent_pk)
+
+            if parent_date is not None:
+                events.append((parent_date, -quantity))
+
+        events += supply_events.get(pk, [])
+
+        current_stock = requirements[pk]["stock"]
+        shortfall_dates[pk] = find_shortfall_date(current_stock, events)
+
+        for child_pk in children_of.get(pk, []):
+            in_degree[child_pk] -= 1
+
+            if in_degree[child_pk] <= 0:
+                queue.append(child_pk)
+
+    return shortfall_dates
+
+
 def calculate_shortfall(
     output_id: int,
     category_id: int | None = None,
@@ -387,6 +601,7 @@ def calculate_shortfall(
         - stock: The current stock on hand for this part
         - on_order: The quantity of this part currently on order
         - shortfall: The calculated shortfall for this part (required - stock - on_order)
+        - shortfall_date: The date this part is projected to go into shortfall (None if not projected to)
     """
 
     logger.info("Generating component shortfall report")
@@ -444,6 +659,12 @@ def calculate_shortfall(
     # once per visit - this memoizes it to a single query per distinct assembly.
     bom_items_cache = {}
 
+    # Record each BOM-cascade edge as it's discovered: {child part ID: {parent
+    # part ID: total quantity contributed by that parent}}. Used afterwards to
+    # determine *when* each part's cascaded demand should be dated - see
+    # `compute_shortfall_dates`.
+    cascade_edges = defaultdict(dict)
+
     # Start with the initial set of outstanding parts
     for data in initial_parts.values():
         part = data["part"]
@@ -495,6 +716,18 @@ def calculate_shortfall(
                 components_to_process.append((sub_part, required_qty, level + 1))
                 data_output.total += 1
 
+                cascade_edges[sub_part.pk][part.pk] = (
+                    cascade_edges[sub_part.pk].get(part.pk, Decimal(0)) + required_qty
+                )
+
+    # Determine *when* each part is projected to go into shortfall (not just
+    # whether/how much) - see `compute_shortfall_dates` for the topological
+    # cascade-dating approach.
+    shortfall_dates = compute_shortfall_dates(requirements, cascade_edges)
+
+    for pk, data in requirements.items():
+        data["shortfall_date"] = shortfall_dates.get(pk)
+
     # Record shortfall values against parts using the configured parameter template
     if parameter_template_id:
         record_shortfall_parameters(requirements, parameter_template_id)
@@ -515,6 +748,7 @@ def calculate_shortfall(
         "In Production",
         "Required Quantity",
         "Shortfall",
+        "Shortfall Date",
         "Units",
     ]
 
@@ -549,6 +783,7 @@ def calculate_shortfall(
             Decimal(data["in_production"]),
             Decimal(data["required"]),
             Decimal(data["shortfall"]),
+            data.get("shortfall_date"),
             part.units,
         ]
 
