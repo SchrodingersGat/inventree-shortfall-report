@@ -1,0 +1,1 @@
+/*eslint-disable*/import type{Messages}from"@lingui/core";export const messages=JSON.parse("{\"4Yq-pa\":[\"Übersetzter Text\"],\"L8ZD4_\":[\"Fallback locale is used if no translation is available\"],\"OPk5rd\":[\"Übersetzter Text, bereitgestellt durch benutzerdefinierten Code!\"],\"ehDjBq\":[\"Übersetzungen werden automatisch geladen\"]}")as Messages;

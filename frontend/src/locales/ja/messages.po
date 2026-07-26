@@ -13,18 +13,18 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/Panel.tsx:96
-msgid "Translated Text"
-msgstr "翻訳されたテキスト"
+#: src/Panel.tsx
+#~ msgid "Translated Text"
+#~ msgstr "翻訳されたテキスト"
 
-#: src/Panel.tsx:97
-msgid "Translated text, provided by custom code!"
-msgstr ""
+#: src/Panel.tsx
+#~ msgid "Translated text, provided by custom code!"
+#~ msgstr ""
 
-#: src/Panel.tsx:98
-msgid "Translations are loaded automatically."
-msgstr ""
+#: src/Panel.tsx
+#~ msgid "Translations are loaded automatically."
+#~ msgstr ""
 
-#: src/Panel.tsx:99
-msgid "Fallback locale is used if no translation is available"
-msgstr ""
+#: src/Panel.tsx
+#~ msgid "Fallback locale is used if no translation is available"
+#~ msgstr ""

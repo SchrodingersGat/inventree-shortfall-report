@@ -25,6 +25,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.0.0",
     "@lingui/cli": "latest",
+    "@lingui/format-po": "latest",
     "@lingui/macro": "latest",
     "@lingui/swc-plugin": "latest",
     "@lingui/vite-plugin": "latest",
