@@ -18,6 +18,7 @@
         <th>On Order</th>
         <th>In Production</th>
         <th>Shortfall</th>
+        <th>Shortfall Date</th>
         <th>Units</th>
     </tr>
     {% for entry in requirements %}
@@ -30,6 +31,13 @@
         <td>{% format_number entry.on_order %}</td>
         <td>{% format_number entry.in_production %}</td>
         <td>{% format_number entry.shortfall %}</td>
+        <td>
+            {% if entry.shortfall_date %}
+                {{ entry.shortfall_date }}
+            {% else %}
+                -
+            {% endif %}
+        </td>
         <td>
             {% if entry.part.units %}
                 {{ entry.part.units }}

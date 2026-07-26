@@ -374,3 +374,41 @@ class ShortfallDateReportColumnTests(ShortfallDateFixtureTestCase):
         rows = {row[0]: row for row in ws.iter_rows(min_row=2, values_only=True)}
 
         self.assertIsNone(rows['DateTop'][date_col])
+
+
+class ShortfallDateEmailTemplateTests(ShortfallDateFixtureTestCase):
+    """Verify the 'Shortfall Date' also reaches the HTML email body, not just the XLSX."""
+
+    def test_shortfall_date_rendered_in_email_body(self):
+        """A part with a projected shortfall date shows that date in the email HTML."""
+        self.create_sales_order(self.top, 10, target_date=IN_5_DAYS)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(output.pk, hide_no_shortfall=False)
+
+        html = shortfall.format_shortfall_report_html(
+            requirements, output, hide_no_shortfall=False
+        )
+
+        from django.utils.formats import date_format
+
+        self.assertIn('Shortfall Date', html)
+        # Django's template engine renders date objects using the locale's
+        # DATE_FORMAT (e.g. "July 31, 2026"), not ISO format - match that
+        # rather than assuming a specific string form.
+        self.assertIn(date_format(IN_5_DAYS), html)
+
+    def test_no_shortfall_date_renders_as_dash_in_email_body(self):
+        """A part with no projected shortfall date shows a dash, not a blank/None, in the email HTML."""
+        location = StockLocation.objects.create(name='Location')
+        StockItem.objects.create(part=self.top, quantity=1000, location=location)
+        self.create_sales_order(self.top, 10, target_date=IN_5_DAYS)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(output.pk, hide_no_shortfall=False)
+
+        html = shortfall.format_shortfall_report_html(
+            requirements, output, hide_no_shortfall=False
+        )
+
+        self.assertNotIn('None', html)
