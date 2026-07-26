@@ -30,6 +30,10 @@ class ShortfallReportView(CreateAPI):
             return Response({"error": "Plugin not found"}, status=404)
 
         include_supplier_data = bool(plugin.get_setting("INCLUDE_SUPPLIER_DATA"))
+        hide_no_shortfall = bool(plugin.get_setting("HIDE_NO_SHORTFALL"))
+        parameter_template_id = (
+            plugin.get_setting("SHORTFALL_PARAMETER_TEMPLATE") or None
+        )
 
         # Validate the incoming request data using the serializer
         serializer = ShortfallReportSerializer(data=request.data)
@@ -61,10 +65,12 @@ class ShortfallReportView(CreateAPI):
             data_output.pk,
             category_id=category.pk if category else None,
             max_bom_depth=max_bom_depth,
+            hide_no_shortfall=hide_no_shortfall,
             horizon_months=horizon_months,
             include_build_orders=include_build_orders,
             include_sales_orders=include_sales_orders,
             include_supplier_data=include_supplier_data,
+            parameter_template_id=parameter_template_id,
             group="shortfall_report",
         )
 

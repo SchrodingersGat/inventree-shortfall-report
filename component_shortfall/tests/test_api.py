@@ -187,3 +187,63 @@ class ShortfallReportAPITests(ShortfallReportAPITestCase):
 
         # Component has ample stock -> no shortfall -> hidden from default report
         self.assertNotIn('Component', names)
+
+    def test_hide_no_shortfall_setting_is_applied(self):
+        """Regression test: HIDE_NO_SHORTFALL=False must make the generated XLSX include zero-shortfall parts.
+
+        Previously this setting was read by the scheduled email task but never
+        passed through to `calculate_shortfall()` on the on-demand API path, so
+        the exported report always hid zero-shortfall rows regardless of the
+        setting.
+        """
+        from plugin.registry import registry
+
+        location = StockLocation.objects.create(name='Location')
+        StockItem.objects.create(part=self.assembly, quantity=1000, location=location)
+        self.create_sales_order()
+
+        plugin = registry.get_plugin('component-shortfall')
+        plugin.set_setting('HIDE_NO_SHORTFALL', False)
+        try:
+            response = self.post(self.url, data={}, expected_code=200)
+        finally:
+            plugin.set_setting('HIDE_NO_SHORTFALL', True)
+
+        output_id = response.data['output']['pk']
+        output = DataOutput.objects.get(pk=output_id)
+
+        from openpyxl import load_workbook
+
+        wb = load_workbook(filename=output.output.path)
+        ws = wb.active
+        names = {row[0] for row in ws.iter_rows(min_row=2, values_only=True)}
+
+        # Assembly has ample stock -> zero shortfall - but should still appear
+        # because HIDE_NO_SHORTFALL was disabled
+        self.assertIn('Assembly', names)
+
+    def test_parameter_template_setting_is_applied(self):
+        """Regression test: SHORTFALL_PARAMETER_TEMPLATE must be applied by the on-demand API, not just the scheduled task."""
+        from common.models import Parameter, ParameterTemplate
+        from django.contrib.contenttypes.models import ContentType
+        from plugin.registry import registry
+
+        template = ParameterTemplate.objects.create(
+            name='Shortfall', model_type=ContentType.objects.get_for_model(Part)
+        )
+
+        self.create_sales_order(quantity=10)
+
+        plugin = registry.get_plugin('component-shortfall')
+        plugin.set_setting('SHORTFALL_PARAMETER_TEMPLATE', template.pk)
+        try:
+            self.post(self.url, data={}, expected_code=200)
+        finally:
+            plugin.set_setting('SHORTFALL_PARAMETER_TEMPLATE', None)
+
+        param = Parameter.objects.get(
+            model_type=ContentType.objects.get_for_model(Part),
+            model_id=self.assembly.pk,
+            template=template,
+        )
+        self.assertEqual(param.data, '10')

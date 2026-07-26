@@ -21,7 +21,7 @@ import part.models as part_models
 import structlog
 from dateutil.relativedelta import relativedelta
 from django.core.files.base import ContentFile
-from django.db.models import DecimalField, F, Sum
+from django.db.models import DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce
 from InvenTree.helpers import current_date, current_time, normalize
 from InvenTree.helpers_model import construct_absolute_url
@@ -64,19 +64,21 @@ def update_part_requirements(
 
         # TODO: Extend filtering of this query, e.g. exclude certain locations, or stock items with certain parameters?
 
+        # Calculate total and "external" stock quantities in a single query
         result = stock_items.aggregate(
-            total=Coalesce(Sum("quantity", output_field=DecimalField()), Decimal(0))
+            total=Coalesce(Sum("quantity", output_field=DecimalField()), Decimal(0)),
+            external=Coalesce(
+                Sum(
+                    "quantity",
+                    filter=Q(location__external=True),
+                    output_field=DecimalField(),
+                ),
+                Decimal(0),
+            ),
         )
 
         requirements["stock"] = result["total"]
-
-        # Separately, calculate the "external" stock quantity
-        external_stock = stock_items.filter(location__external=True)
-        result = external_stock.aggregate(
-            total=Coalesce(Sum("quantity", output_field=DecimalField()), Decimal(0))
-        )
-
-        requirements["external_stock"] = result["total"]
+        requirements["external_stock"] = result["external"]
 
     # TODO: What about BOM items which allow variants???
     # TODO: What about BOM substitutes?
@@ -204,6 +206,7 @@ def get_outstanding_build_order_parts(
     build_order_lines = BuildLine.objects.filter(
         build__status__in=BuildStatusGroups.ACTIVE_CODES,
         build__part__virtual=False,
+        bom_item__sub_part__virtual=False,
         consumed__lt=F("quantity"),
     ).prefetch_related(
         "bom_item__sub_part",
@@ -435,6 +438,12 @@ def calculate_shortfall(
     # Each entry is a tuple of (part, quantity, level)
     components_to_process = []
 
+    # Cache of non-consumable BOM items per assembly part, keyed by part ID.
+    # A part reused across multiple branches of the BOM graph (or required both
+    # directly and via a parent assembly) would otherwise have its BOM re-queried
+    # once per visit - this memoizes it to a single query per distinct assembly.
+    bom_items_cache = {}
+
     # Start with the initial set of outstanding parts
     for data in initial_parts.values():
         part = data["part"]
@@ -467,16 +476,17 @@ def calculate_shortfall(
 
         # Is this an assembly?
         if part.assembly:
-            components = (
-                part.get_bom_items(include_virtual=False)
-                .filter(consumable=False)
-                .prefetch_related(
-                    "sub_part",
-                    "sub_part__category",
+            if part.pk not in bom_items_cache:
+                bom_items_cache[part.pk] = list(
+                    part.get_bom_items(include_virtual=False)
+                    .filter(consumable=False)
+                    .prefetch_related(
+                        "sub_part",
+                        "sub_part__category",
+                    )
                 )
-            )
 
-            for item in components:
+            for item in bom_items_cache[part.pk]:
                 sub_part = item.sub_part
 
                 # Calculate the quantity multiplier for this sub-part
