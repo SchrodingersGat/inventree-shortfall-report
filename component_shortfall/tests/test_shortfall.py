@@ -611,8 +611,20 @@ class CalculateShortfallTests(ShortfallTestCase):
         self.assertIsNone(result)
 
 
-class FormatShortfallReportHtmlTests(CalculateShortfallTests):
+class FormatShortfallReportHtmlTests(ShortfallTestCase):
     """Tests for `format_shortfall_report_html` directly (the scheduled-email body)."""
+
+    def setUp(self):
+        super().setUp()
+        from company.models import Company
+
+        self.customer = Company.objects.create(name='Customer', is_customer=True)
+
+    def make_output(self):
+        """Create a DataOutput instance to pass into calculate_shortfall."""
+        return DataOutput.objects.create(
+            total=0, progress=0, output_type='shortfall_report'
+        )
 
     def test_hide_no_shortfall_true_omits_zero_shortfall_entries(self):
         """A zero-shortfall part is omitted from the HTML body when hide_no_shortfall=True."""
@@ -682,3 +694,70 @@ class FormatShortfallReportHtmlTests(CalculateShortfallTests):
             requirements, empty_output, hide_no_shortfall=False
         )
         self.assertNotIn('as an Excel file', html)
+
+
+class XlsxHyperlinkTests(ShortfallTestCase):
+    """Tests for the hyperlinks generated in the XLSX export."""
+
+    def setUp(self):
+        super().setUp()
+        from company.models import Company
+
+        self.customer = Company.objects.create(name='Customer', is_customer=True)
+
+    def make_output(self):
+        """Create a DataOutput instance to pass into calculate_shortfall."""
+        return DataOutput.objects.create(
+            total=0, progress=0, output_type='shortfall_report'
+        )
+
+    def generate_workbook(self, part, category=None):
+        """Helper: create an outstanding order for `part` and return the loaded workbook."""
+        from InvenTree.helpers_model import construct_absolute_url
+        from openpyxl import load_workbook
+
+        so = SalesOrder.objects.create(customer=self.customer, reference='SO-0001')
+        SalesOrderLineItem.objects.create(order=so, part=part, quantity=10)
+
+        output = self.make_output()
+        shortfall.calculate_shortfall(output.pk, hide_no_shortfall=False)
+        output.refresh_from_db()
+
+        wb = load_workbook(filename=output.output.path)
+        return wb.active, construct_absolute_url
+
+    def test_part_name_cell_has_hyperlink_to_part(self):
+        """The 'Part Name' cell (column 1) links to the part's absolute URL."""
+        ws, construct_absolute_url = self.generate_workbook(self.assembly)
+
+        cell = ws.cell(row=2, column=1)
+        self.assertIsNotNone(cell.hyperlink)
+        self.assertEqual(
+            cell.hyperlink.target,
+            construct_absolute_url(self.assembly.get_absolute_url()),
+        )
+
+    def test_category_cell_has_hyperlink_when_part_has_category(self):
+        """The 'Category' cell (column 5) links to the category's absolute URL, when set."""
+        from part.models import PartCategory
+
+        category = PartCategory.objects.create(name='Assemblies')
+        self.assembly.category = category
+        self.assembly.save()
+
+        ws, construct_absolute_url = self.generate_workbook(self.assembly)
+
+        cell = ws.cell(row=2, column=5)
+        self.assertIsNotNone(cell.hyperlink)
+        self.assertEqual(
+            cell.hyperlink.target, construct_absolute_url(category.get_absolute_url())
+        )
+
+    def test_category_cell_has_no_hyperlink_when_part_has_no_category(self):
+        """The 'Category' cell (column 5) has no hyperlink when the part has no category."""
+        self.assertIsNone(self.assembly.category)
+
+        ws, _ = self.generate_workbook(self.assembly)
+
+        cell = ws.cell(row=2, column=5)
+        self.assertIsNone(cell.hyperlink)

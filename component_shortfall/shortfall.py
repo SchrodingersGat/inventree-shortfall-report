@@ -164,11 +164,8 @@ def get_outstanding_sales_order_parts(
     outstanding_parts = {}
 
     for line in sales_order_lines:
-        deficit = max(0, line.quantity - line.shipped)
-
-        if deficit <= 0:
-            # No outstanding quantity for this line item
-            continue
+        # The queryset already filters shipped__lt=quantity, so this is always > 0
+        deficit = line.quantity - line.shipped
 
         part_data = outstanding_parts.get(line.part.pk, None) or {
             "part": line.part,
@@ -229,11 +226,8 @@ def get_outstanding_build_order_parts(
     outstanding_parts = {}
 
     for line in build_order_lines:
-        deficit = max(0, line.quantity - line.consumed)
-
-        if deficit <= 0:
-            # No outstanding quantity for this line item
-            continue
+        # The queryset already filters consumed__lt=quantity, so this is always > 0
+        deficit = line.quantity - line.consumed
 
         part = line.bom_item.sub_part
 
