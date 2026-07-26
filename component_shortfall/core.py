@@ -211,6 +211,7 @@ class ComponentShortfall(
         # Calculate shortfall report with default settings
         requirements = calculate_shortfall(
             data_output.pk,
+            hide_no_shortfall=hide_no_shortfall,
             horizon_months=horizon_months,
             parameter_template_id=parameter_template_id,
             include_supplier_data=include_supplier_data,
