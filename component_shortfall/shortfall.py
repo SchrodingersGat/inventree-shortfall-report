@@ -371,6 +371,59 @@ def _resolve_event_date(*candidates: date | None) -> date:
     return current_date()
 
 
+def find_shortfall_timeline(
+    current_balance: Decimal, dated_deltas: list[tuple[date, Decimal]]
+) -> list[tuple[date, Decimal]]:
+    """Return the timeline of *new* deficits as they occur.
+
+    Unlike a single "first shortfall date", this returns every date on
+    which the running balance reaches a fresh low - i.e. every date on
+    which additional supply must be sourced beyond anything already
+    accounted for. A deficit that is later covered by incoming supply does
+    not generate any further downstream demand once it has been absorbed;
+    only genuinely new lows are reported.
+
+    Arguments:
+        current_balance: The stock balance on hand today (not including any
+            on-order/in-production/outstanding-demand quantity).
+        dated_deltas: A list of (date, quantity) tuples - positive for
+            incoming supply, negative for outgoing demand.
+
+    Returns:
+        A list of (date, new_deficit_quantity) tuples, sorted by date.
+        new_deficit_quantity is always positive - the additional amount
+        short as of that date, versus the worst point reached previously.
+        Empty list if the balance is never projected to go negative.
+    """
+
+    timeline: list[tuple[date, Decimal]] = []
+    balance = current_balance
+    worst_balance = Decimal(0)
+
+    if balance < 0:
+        timeline.append((current_date(), -balance))
+        worst_balance = balance
+
+    # Group deltas by date first, so that same-day events are always applied
+    # together - otherwise the arbitrary order two same-day events are processed
+    # in could incorrectly report a shortfall date where the net effect for that
+    # day is actually non-negative.
+    delta_by_date = defaultdict(Decimal)
+
+    for event_date, delta in dated_deltas:
+        delta_by_date[event_date] += delta
+
+    for event_date in sorted(delta_by_date):
+        balance += delta_by_date[event_date]
+
+        if balance < worst_balance:
+            new_deficit = worst_balance - balance
+            timeline.append((event_date, new_deficit))
+            worst_balance = balance
+
+    return timeline
+
+
 def find_shortfall_date(
     current_balance: Decimal, dated_deltas: list[tuple[date, Decimal]]
 ) -> date | None:
@@ -388,27 +441,8 @@ def find_shortfall_date(
         - None, if the balance is never projected to go negative
     """
 
-    if current_balance < 0:
-        return current_date()
-
-    # Group deltas by date first, so that same-day events are always applied
-    # together - otherwise the arbitrary order two same-day events are processed
-    # in could incorrectly report a shortfall date where the net effect for that
-    # day is actually non-negative.
-    delta_by_date = defaultdict(Decimal)
-
-    for event_date, delta in dated_deltas:
-        delta_by_date[event_date] += delta
-
-    balance = current_balance
-
-    for event_date in sorted(delta_by_date):
-        balance += delta_by_date[event_date]
-
-        if balance < 0:
-            return event_date
-
-    return None
+    timeline = find_shortfall_timeline(current_balance, dated_deltas)
+    return timeline[0][0] if timeline else None
 
 
 def get_dated_demand_events(part_ids) -> dict[int, list[tuple[date, Decimal]]]:
@@ -511,20 +545,24 @@ def get_dated_supply_events(part_ids) -> dict[int, list[tuple[date, Decimal]]]:
     return events
 
 
-def compute_shortfall_dates(requirements: dict, cascade_edges: dict) -> dict:
+def compute_shortfall_dates(
+    requirements: dict, cascade_edges: dict, cascade_ratios: dict
+) -> dict:
     """Compute the shortfall date for every part in `requirements`.
 
-    BOM-cascaded demand must be dated using the *parent's own* resolved
-    shortfall date (not "now") - so parents have to be fully resolved before
-    their children can be. `cascade_edges` (child part ID -> {parent part ID:
-    quantity contributed by that parent}) describes this dependency graph;
-    parts are processed in topological order (Kahn's algorithm) so that a
-    child is only resolved once every contributing parent already has a
-    result, regardless of how the BOM graph's path lengths vary.
+    BOM-cascaded demand is dated using the *parent's own* deficit timeline
+    (not a single aggregate dumped on its earliest shortfall date) - each
+    incremental deficit the parent develops over time is scaled by the BOM
+    ratio and applied to the child on that same date. `cascade_edges`
+    (child part ID -> {parent part ID: quantity}) still describes the
+    dependency graph for topological ordering; `cascade_ratios` (child part
+    ID -> {parent part ID: quantity-per-unit}) supplies the per-event
+    scaling factor.
 
     Arguments:
         requirements: The populated requirements dict from `calculate_shortfall`
         cascade_edges: dict of {child_part_id: {parent_part_id: quantity}}
+        cascade_ratios: dict of {child_part_id: {parent_part_id: ratio}}
 
     Returns:
         A dict of {part_id: date | None} - None if that part's stock is never
@@ -544,7 +582,8 @@ def compute_shortfall_dates(requirements: dict, cascade_edges: dict) -> dict:
         for parent_pk in parents:
             children_of[parent_pk].append(child_pk)
 
-    shortfall_dates = {}
+    shortfall_dates: dict = {}
+    shortfall_timelines: dict = {}
     queue = [pk for pk in part_ids if in_degree.get(pk, 0) == 0]
 
     while queue:
@@ -552,19 +591,21 @@ def compute_shortfall_dates(requirements: dict, cascade_edges: dict) -> dict:
 
         events = list(demand_events.get(pk, []))
 
-        # Layer in cascaded demand, dated using each contributing parent's own
-        # resolved shortfall date - a parent with no projected shortfall date
-        # contributes no cascaded demand event at all.
-        for parent_pk, quantity in cascade_edges.get(pk, {}).items():
-            parent_date = shortfall_dates.get(parent_pk)
-
-            if parent_date is not None:
-                events.append((parent_date, -quantity))
+        # Layer in cascaded demand: for every parent contributing to this
+        # part, walk that parent's OWN deficit timeline and add each
+        # incremental deficit (scaled by the BOM ratio) on its own date. A
+        # parent with no projected deficit contributes no cascaded demand.
+        for parent_pk, ratio in cascade_ratios.get(pk, {}).items():
+            for parent_date, parent_deficit in shortfall_timelines.get(parent_pk, []):
+                events.append((parent_date, -(parent_deficit * ratio)))
 
         events += supply_events.get(pk, [])
 
         current_stock = requirements[pk]["stock"]
-        shortfall_dates[pk] = find_shortfall_date(current_stock, events)
+        timeline = find_shortfall_timeline(current_stock, events)
+
+        shortfall_timelines[pk] = timeline
+        shortfall_dates[pk] = timeline[0][0] if timeline else None
 
         for child_pk in children_of.get(pk, []):
             in_degree[child_pk] -= 1
@@ -672,6 +713,12 @@ def calculate_shortfall(
     # `compute_shortfall_dates`.
     cascade_edges = defaultdict(dict)
 
+    # Per-unit BOM ratio for each cascade edge: {child part ID: {parent part
+    # ID: quantity of child needed per single unit of the parent's
+    # shortfall}}. Used to scale the parent's own deficit timeline when
+    # dating the child's cascaded demand - see `compute_shortfall_dates`.
+    cascade_ratios = defaultdict(dict)
+
     # Start with the initial set of outstanding parts
     for data in initial_parts.values():
         part = data["part"]
@@ -727,10 +774,19 @@ def calculate_shortfall(
                     cascade_edges[sub_part.pk].get(part.pk, Decimal(0)) + required_qty
                 )
 
+                # The ratio is constant for a given (sub_part, parent) BOM
+                # relationship, so a plain assignment (not accumulation) is
+                # correct even if this pair is revisited.
+                cascade_ratios[sub_part.pk][part.pk] = item.get_required_quantity(
+                    Decimal(1)
+                )
+
     # Determine *when* each part is projected to go into shortfall (not just
     # whether/how much) - see `compute_shortfall_dates` for the topological
     # cascade-dating approach.
-    shortfall_dates = compute_shortfall_dates(requirements, cascade_edges)
+    shortfall_dates = compute_shortfall_dates(
+        requirements, cascade_edges, cascade_ratios
+    )
 
     for pk, data in requirements.items():
         data["shortfall_date"] = shortfall_dates.get(pk)

@@ -24,6 +24,7 @@ TODAY = current_date()
 IN_5_DAYS = TODAY + timedelta(days=5)
 IN_10_DAYS = TODAY + timedelta(days=10)
 IN_20_DAYS = TODAY + timedelta(days=20)
+IN_60_DAYS = TODAY + timedelta(days=60)
 
 
 class FindShortfallDateTests(InvenTreeTestCase):
@@ -85,6 +86,65 @@ class FindShortfallDateTests(InvenTreeTestCase):
         """A balance of exactly zero is not considered a shortfall."""
         result = shortfall.find_shortfall_date(Decimal(0), [(IN_5_DAYS, Decimal(0))])
         self.assertIsNone(result)
+
+
+class FindShortfallTimelineTests(InvenTreeTestCase):
+    """Unit tests for the `find_shortfall_timeline` primitive."""
+
+    def test_already_negative_returns_single_entry_dated_today(self):
+        """A negative starting balance gives a single entry dated today."""
+        result = shortfall.find_shortfall_timeline(
+            Decimal(-5), [(IN_20_DAYS, Decimal(100))]
+        )
+        self.assertEqual(result, [(TODAY, Decimal(5))])
+
+    def test_dips_negative_once_and_stays_negative_gives_single_entry(self):
+        """A balance which goes negative once and never recovers gives one timeline entry."""
+        result = shortfall.find_shortfall_timeline(
+            Decimal(10), [(IN_5_DAYS, Decimal(-15)), (IN_10_DAYS, Decimal(-5))]
+        )
+        # Day 5: 10 - 15 = -5 (new low). Day 10: -5 - 5 = -10 (new low).
+        self.assertEqual(result, [(IN_5_DAYS, Decimal(5)), (IN_10_DAYS, Decimal(5))])
+
+    def test_recovers_then_dips_again_gives_two_entries(self):
+        """A balance that dips negative, recovers via supply, then dips again gives two entries."""
+        result = shortfall.find_shortfall_timeline(
+            Decimal(0),
+            [
+                (IN_5_DAYS, Decimal(-10)),
+                (IN_10_DAYS, Decimal(100)),
+                (IN_20_DAYS, Decimal(-95)),
+            ],
+        )
+        # Day 5: 0 - 10 = -10 (new low, deficit 10).
+        # Day 10: -10 + 100 = 90 (recovered, not a new low - no entry).
+        # Day 20: 90 - 95 = -5, which is still above the worst balance of -10,
+        # so this is NOT a new low - no additional entry.
+        self.assertEqual(result, [(IN_5_DAYS, Decimal(10))])
+
+    def test_recovers_then_dips_below_previous_low_gives_two_entries(self):
+        """A balance that dips negative, recovers, then dips below the previous low gives two entries."""
+        result = shortfall.find_shortfall_timeline(
+            Decimal(0),
+            [
+                (IN_5_DAYS, Decimal(-10)),
+                (IN_10_DAYS, Decimal(100)),
+                (IN_20_DAYS, Decimal(-105)),
+            ],
+        )
+        # Day 5: 0 - 10 = -10 (new low, deficit 10).
+        # Day 10: -10 + 100 = 90 (recovered).
+        # Day 20: 90 - 105 = -15, a new low beyond the previous -10 (deficit 5).
+        self.assertEqual(
+            result, [(IN_5_DAYS, Decimal(10)), (IN_20_DAYS, Decimal(5))]
+        )
+
+    def test_never_goes_negative_returns_empty_list(self):
+        """A balance that stays non-negative throughout returns an empty timeline."""
+        result = shortfall.find_shortfall_timeline(
+            Decimal(10), [(IN_5_DAYS, Decimal(-5)), (IN_10_DAYS, Decimal(5))]
+        )
+        self.assertEqual(result, [])
 
 
 class ShortfallDateFixtureTestCase(InvenTreeTestCase):
@@ -274,6 +334,29 @@ class CascadeDateTests(ShortfallDateFixtureTestCase):
         self.assertEqual(requirements[self.top.pk]['shortfall_date'], IN_5_DAYS)
         self.assertEqual(requirements[self.mid.pk]['shortfall_date'], IN_5_DAYS)
         self.assertEqual(requirements[self.bottom.pk]['shortfall_date'], IN_5_DAYS)
+
+    def test_child_cascaded_demand_lands_on_parent_incremental_deficit_dates(self):
+        """Cascaded demand is dated using the parent's own staggered deficit timeline, not dumped on one date.
+
+        TOP has two demand events (10 units each) spread months apart. MID has
+        enough stock (15) to absorb the first 10-unit cascaded event alone, but
+        not both dumped on the same day - so its shortfall date should land on
+        TOP's SECOND deficit date. The old aggregate-on-earliest-date cascade
+        would have incorrectly reported TOP's earliest shortfall date instead.
+        """
+        location = StockLocation.objects.create(name='Location')
+        StockItem.objects.create(part=self.mid, quantity=15, location=location)
+
+        self.create_sales_order(self.top, 10, target_date=IN_5_DAYS)
+        self.create_sales_order(self.top, 10, target_date=IN_60_DAYS)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(
+            output.pk, hide_no_shortfall=False
+        )
+
+        self.assertEqual(requirements[self.top.pk]['shortfall_date'], IN_5_DAYS)
+        self.assertEqual(requirements[self.mid.pk]['shortfall_date'], IN_60_DAYS)
 
 
 class DatedEventCollectionTests(ShortfallDateFixtureTestCase):
