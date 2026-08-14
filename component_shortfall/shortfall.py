@@ -748,6 +748,7 @@ def calculate_shortfall(
         "Part IPN",
         "Assembly",
         "Purchaseable",
+        "Consumable",
         "Category",
         "Current Stock",
         "External Stock",
@@ -783,6 +784,7 @@ def calculate_shortfall(
             part.IPN,
             part.assembly,
             part.purchaseable,
+            part.consumable,
             part.category.pathstring if part.category else None,
             Decimal(data["stock"]),
             Decimal(data["external_stock"]),
@@ -857,12 +859,10 @@ def format_shortfall_report_html(
         if hide_no_shortfall and entry.get("shortfall", 0) <= 0:
             continue
 
-        requirements_list.append(
-            {
-                **entry,
-                "part_url": construct_absolute_url(entry["part"].get_absolute_url()),
-            }
-        )
+        requirements_list.append({
+            **entry,
+            "part_url": construct_absolute_url(entry["part"].get_absolute_url()),
+        })
 
     context_data["requirements"] = requirements_list
 
