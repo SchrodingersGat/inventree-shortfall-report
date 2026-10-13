@@ -13,7 +13,9 @@ A sales order for TOP therefore drives BOTTOM's requirement through *both*
 branches, and the two contributions must be summed rather than overwritten.
 """
 
+from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 
 from build.models import Build
 from common.models import DataOutput
@@ -22,6 +24,7 @@ from order.models import SalesOrder, SalesOrderLineItem
 from part.models import BomItem, Part
 from stock.models import StockItem, StockLocation
 
+from InvenTree.helpers import current_date
 from InvenTree.unit_test import InvenTreeTestCase
 
 from .. import shortfall
@@ -305,3 +308,55 @@ class ShortfallReportOutputTests(DiamondBOMTestCase):
         rows = {row[0]: row for row in ws.iter_rows(min_row=2, values_only=True)}
         supplier_col = header.index('Suppliers')
         self.assertEqual(rows['Bottom'][supplier_col], 'Acme Supply')
+
+
+class RoundingMultipleTests(DiamondBOMTestCase):
+    """Regression tests for BOM items with a rounding multiple / setup quantity.
+
+    `BomItem.get_required_quantity` used to return a float on the
+    rounding-multiple path, which raised a TypeError when combined with the
+    Decimal quantities used by `calculate_shortfall`.
+    """
+
+    def setUp(self):
+        """Apply a rounding multiple and setup quantity to the MID_A -> BOTTOM line."""
+        super().setUp()
+
+        self.item_a_bottom.rounding_multiple = 7
+        self.item_a_bottom.setup_quantity = 3
+        self.item_a_bottom.save()
+
+    def check_requirements(self):
+        """Run the shortfall calculation for a dated sales order and check the result."""
+        so = self.create_sales_order(self.top, 10)
+        so.target_date = current_date() + timedelta(days=30)
+        so.save()
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(
+            output.pk, hide_no_shortfall=False
+        )
+
+        # MID_A branch: (20 * 5) + 3 = 103, rounded up to a multiple of 7 = 105
+        # MID_B branch: 30 * 2 = 60
+        bottom = requirements[self.bottom.pk]
+        self.assertEqual(bottom['required'], 165)
+        self.assertEqual(bottom['shortfall'], 165)
+        self.assertIsInstance(bottom['required'], Decimal)
+        self.assertIsNotNone(bottom['shortfall_date'])
+
+    def test_rounding_multiple(self):
+        """A rounding multiple on a BOM line does not break the calculation."""
+        self.check_requirements()
+
+    def test_float_required_quantity(self):
+        """A float from `get_required_quantity` (older InvenTree versions) is coerced to Decimal."""
+        original = BomItem.get_required_quantity
+
+        def float_required_quantity(bom_item, quantity):
+            return float(original(bom_item, quantity))
+
+        with mock.patch.object(
+            BomItem, 'get_required_quantity', float_required_quantity
+        ):
+            self.check_requirements()
