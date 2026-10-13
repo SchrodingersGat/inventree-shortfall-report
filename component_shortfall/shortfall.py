@@ -40,6 +40,21 @@ def get_plugin():
     return registry.get_plugin("component-shortfall")
 
 
+def get_bom_required_quantity(bom_item, quantity: Decimal) -> Decimal:
+    """Return the required quantity for a BOM item, always as a Decimal.
+
+    Older InvenTree versions return a float from `BomItem.get_required_quantity`
+    when the BOM item has a `rounding_multiple` set, which cannot be combined
+    with the Decimal arithmetic used throughout this module.
+    """
+    required = bom_item.get_required_quantity(quantity)
+
+    if not isinstance(required, Decimal):
+        required = Decimal(str(required))
+
+    return required
+
+
 def update_part_requirements(
     part, required_qty: Decimal, component_data: dict
 ) -> Decimal:
@@ -765,7 +780,7 @@ def calculate_shortfall(
                 sub_part = item.sub_part
 
                 # Calculate the quantity multiplier for this sub-part
-                required_qty = item.get_required_quantity(shortfall)
+                required_qty = get_bom_required_quantity(item, shortfall)
 
                 components_to_process.append((sub_part, required_qty, level + 1))
                 data_output.total += 1
@@ -777,8 +792,8 @@ def calculate_shortfall(
                 # The ratio is constant for a given (sub_part, parent) BOM
                 # relationship, so a plain assignment (not accumulation) is
                 # correct even if this pair is revisited.
-                cascade_ratios[sub_part.pk][part.pk] = item.get_required_quantity(
-                    Decimal(1)
+                cascade_ratios[sub_part.pk][part.pk] = get_bom_required_quantity(
+                    item, Decimal(1)
                 )
 
     # Determine *when* each part is projected to go into shortfall (not just
