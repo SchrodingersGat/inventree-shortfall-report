@@ -16,6 +16,16 @@ For each component it computes:
 
 Results are exported as an `.xlsx` file and can also be emailed automatically on a configurable schedule.
 
+### Setup Quantity and Rounding Multiple
+
+BOM lines can specify a *setup quantity* (a fixed extra quantity per build) and a *rounding multiple* (the required quantity is rounded up to a multiple of this value). Both depend on how many build orders the demand is split into, which the plugin cannot know in advance.
+
+The plugin resolves this by treating each assembly's **total shortfall as a single build**: the BOM formula is applied once to the assembly's cumulative shortfall, so the setup quantity is added once and rounding is applied once, regardless of how many orders (or dates) the demand comes from. For example, an assembly short by 20 units, with a BOM line of 1 per unit plus a setup quantity of 50, requires 70 of that component.
+
+When calculating shortfall dates, the setup quantity is demanded on the date the assembly first goes into shortfall, and later deficits only add the extra quantity they need.
+
+This is a lower bound. If the demand will actually be built as several separate build orders, each incurring its own setup quantity and rounding, the real component requirement will be higher than reported.
+
 ## Installation
 
 ### Via User Interface
