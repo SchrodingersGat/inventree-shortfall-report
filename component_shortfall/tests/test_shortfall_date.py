@@ -359,6 +359,83 @@ class CascadeDateTests(ShortfallDateFixtureTestCase):
         self.assertEqual(requirements[self.mid.pk]['shortfall_date'], IN_60_DAYS)
 
 
+class CascadeSetupAndRoundingTests(ShortfallDateFixtureTestCase):
+    """BOM setup quantity and rounding multiple are applied once per parent.
+
+    The BOM formula is applied to the parent's cumulative shortfall (not to each
+    visit, or to each dated deficit), so the cascaded quantity and the cascaded
+    dates agree with each other.
+    """
+
+    def set_top_mid_bom(self, **fields):
+        """Update the TOP -> MID BOM line."""
+        BomItem.objects.filter(part=self.top, sub_part=self.mid).update(**fields)
+
+    def run_staggered_top_demand(self, mid_stock):
+        """TOP has two 10-unit sales orders on different dates, and no stock."""
+        location = StockLocation.objects.create(name='Location')
+        StockItem.objects.create(part=self.mid, quantity=mid_stock, location=location)
+
+        self.create_sales_order(self.top, 10, target_date=IN_5_DAYS)
+        self.create_sales_order(self.top, 10, target_date=IN_60_DAYS)
+
+        output = self.make_output()
+        return shortfall.calculate_shortfall(output.pk, hide_no_shortfall=False)
+
+    def test_rounding_multiple_not_applied_per_date(self):
+        """A rounding multiple covering the whole demand gives no shortfall date."""
+        self.set_top_mid_bom(rounding_multiple=100)
+
+        requirements = self.run_staggered_top_demand(mid_stock=150)
+
+        # 20 required, rounded up to 100 - covered by stock of 150
+        self.assertEqual(requirements[self.mid.pk]['required'], 100)
+        self.assertEqual(requirements[self.mid.pk]['shortfall'], 0)
+        self.assertIsNone(requirements[self.mid.pk]['shortfall_date'])
+
+    def test_setup_quantity_not_applied_per_date(self):
+        """The setup quantity is counted once, not once per dated deficit."""
+        self.set_top_mid_bom(setup_quantity=50)
+
+        requirements = self.run_staggered_top_demand(mid_stock=70)
+
+        # 20 + 50 = 70 - exactly covered by stock
+        self.assertEqual(requirements[self.mid.pk]['required'], 70)
+        self.assertEqual(requirements[self.mid.pk]['shortfall'], 0)
+        self.assertIsNone(requirements[self.mid.pk]['shortfall_date'])
+
+    def test_setup_quantity_lands_on_first_deficit_date(self):
+        """The setup quantity is demanded with the parent's first deficit."""
+        self.set_top_mid_bom(setup_quantity=50)
+
+        # First deficit needs 10 + 50 = 60 (covered), second needs 10 more (not)
+        requirements = self.run_staggered_top_demand(mid_stock=65)
+
+        self.assertEqual(requirements[self.mid.pk]['shortfall'], 5)
+        self.assertEqual(requirements[self.mid.pk]['shortfall_date'], IN_60_DAYS)
+
+    def test_setup_quantity_counted_once_when_parent_revisited(self):
+        """A parent visited twice (direct + via assembly) only adds setup once."""
+        BomItem.objects.filter(part=self.mid, sub_part=self.bottom).update(
+            setup_quantity=50
+        )
+
+        # MID is required directly, and via TOP
+        self.create_sales_order(self.mid, 10, target_date=IN_5_DAYS)
+        self.create_sales_order(self.top, 10, target_date=IN_60_DAYS)
+
+        output = self.make_output()
+        requirements = shortfall.calculate_shortfall(
+            output.pk, hide_no_shortfall=False
+        )
+
+        self.assertEqual(requirements[self.mid.pk]['shortfall'], 20)
+
+        # 20 + 50 = 70 (not 10 + 50 + 10 + 50 = 120)
+        self.assertEqual(requirements[self.bottom.pk]['required'], 70)
+        self.assertEqual(requirements[self.bottom.pk]['shortfall_date'], IN_5_DAYS)
+
+
 class DatedEventCollectionTests(ShortfallDateFixtureTestCase):
     """Tests for the dated demand/supply event collector functions directly."""
 

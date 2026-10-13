@@ -55,6 +55,33 @@ def get_bom_required_quantity(bom_item, quantity: Decimal) -> Decimal:
     return required
 
 
+def get_cascaded_quantity(bom_item, before: Decimal, after: Decimal) -> Decimal:
+    """Return the additional sub-part quantity needed as a parent's shortfall grows.
+
+    The BOM formula (including setup quantity and rounding multiple) is
+    applied to the parent's *cumulative* shortfall, and the difference between
+    the two totals is returned. Summed over every increment, this gives the
+    BOM formula applied once to the parent's total shortfall - so the setup
+    quantity is counted once and rounding is applied once, regardless of how
+    many times the parent is visited or how many dates its deficit is spread
+    across.
+
+    Arguments:
+        bom_item: The BomItem linking the parent assembly to the sub-part
+        before: The parent's cumulative shortfall before this increment
+        after: The parent's cumulative shortfall after this increment
+    """
+
+    def total(quantity: Decimal) -> Decimal:
+        # No parent shortfall means no sub-part demand (not just the setup quantity)
+        if quantity <= 0:
+            return Decimal(0)
+
+        return get_bom_required_quantity(bom_item, quantity)
+
+    return total(after) - total(before)
+
+
 def update_part_requirements(
     part, required_qty: Decimal, component_data: dict
 ) -> Decimal:
@@ -560,24 +587,20 @@ def get_dated_supply_events(part_ids) -> dict[int, list[tuple[date, Decimal]]]:
     return events
 
 
-def compute_shortfall_dates(
-    requirements: dict, cascade_edges: dict, cascade_ratios: dict
-) -> dict:
+def compute_shortfall_dates(requirements: dict, cascade_edges: dict) -> dict:
     """Compute the shortfall date for every part in `requirements`.
 
     BOM-cascaded demand is dated using the *parent's own* deficit timeline
     (not a single aggregate dumped on its earliest shortfall date) - each
-    incremental deficit the parent develops over time is scaled by the BOM
-    ratio and applied to the child on that same date. `cascade_edges`
-    (child part ID -> {parent part ID: quantity}) still describes the
-    dependency graph for topological ordering; `cascade_ratios` (child part
-    ID -> {parent part ID: quantity-per-unit}) supplies the per-event
-    scaling factor.
+    incremental deficit the parent develops over time is converted to child
+    demand (see `get_cascaded_quantity`) and applied to the child on that same
+    date. `cascade_edges` (child part ID -> {parent part ID: [BomItem, ...]})
+    describes both the dependency graph for topological ordering and the BOM
+    lines used to convert parent deficits into child demand.
 
     Arguments:
         requirements: The populated requirements dict from `calculate_shortfall`
-        cascade_edges: dict of {child_part_id: {parent_part_id: quantity}}
-        cascade_ratios: dict of {child_part_id: {parent_part_id: ratio}}
+        cascade_edges: dict of {child_part_id: {parent_part_id: [BomItem, ...]}}
 
     Returns:
         A dict of {part_id: date | None} - None if that part's stock is never
@@ -607,12 +630,27 @@ def compute_shortfall_dates(
         events = list(demand_events.get(pk, []))
 
         # Layer in cascaded demand: for every parent contributing to this
-        # part, walk that parent's OWN deficit timeline and add each
-        # incremental deficit (scaled by the BOM ratio) on its own date. A
-        # parent with no projected deficit contributes no cascaded demand.
-        for parent_pk, ratio in cascade_ratios.get(pk, {}).items():
+        # part, walk that parent's OWN deficit timeline and add the child
+        # demand for each incremental deficit on its own date. The BOM formula
+        # is applied to the parent's cumulative deficit, so setup quantity and
+        # rounding are counted once rather than once per date. A parent with
+        # no projected deficit contributes no cascaded demand.
+        for parent_pk, bom_items in cascade_edges.get(pk, {}).items():
+            cumulative = Decimal(0)
+
             for parent_date, parent_deficit in shortfall_timelines.get(parent_pk, []):
-                events.append((parent_date, -(parent_deficit * ratio)))
+                demand = sum(
+                    (
+                        get_cascaded_quantity(
+                            item, cumulative, cumulative + parent_deficit
+                        )
+                        for item in bom_items
+                    ),
+                    Decimal(0),
+                )
+                cumulative += parent_deficit
+
+                events.append((parent_date, -demand))
 
         events += supply_events.get(pk, [])
 
@@ -723,16 +761,9 @@ def calculate_shortfall(
     bom_items_cache = {}
 
     # Record each BOM-cascade edge as it's discovered: {child part ID: {parent
-    # part ID: total quantity contributed by that parent}}. Used afterwards to
-    # determine *when* each part's cascaded demand should be dated - see
-    # `compute_shortfall_dates`.
+    # part ID: [BomItem, ...]}}. Used afterwards to determine *when* each
+    # part's cascaded demand should be dated - see `compute_shortfall_dates`.
     cascade_edges = defaultdict(dict)
-
-    # Per-unit BOM ratio for each cascade edge: {child part ID: {parent part
-    # ID: quantity of child needed per single unit of the parent's
-    # shortfall}}. Used to scale the parent's own deficit timeline when
-    # dating the child's cascaded demand - see `compute_shortfall_dates`.
-    cascade_ratios = defaultdict(dict)
 
     # Start with the initial set of outstanding parts
     for data in initial_parts.values():
@@ -751,6 +782,10 @@ def calculate_shortfall(
         data_output.progress += 1
 
         shortfall = update_part_requirements(part, quantity, requirements)
+
+        # Cumulative shortfall for this part, before and after this visit
+        shortfall_after = requirements[part.pk]["shortfall"]
+        shortfall_before = shortfall_after - shortfall
 
         # Update every 50 iterations
         if data_output.progress % 50 == 0:
@@ -776,32 +811,27 @@ def calculate_shortfall(
                     )
                 )
 
+                # Register the cascade edges once per assembly (not per visit).
+                # A list is used in case the BOM has multiple lines for the
+                # same sub-part.
+                for item in bom_items_cache[part.pk]:
+                    cascade_edges[item.sub_part.pk].setdefault(part.pk, []).append(item)
+
             for item in bom_items_cache[part.pk]:
                 sub_part = item.sub_part
 
-                # Calculate the quantity multiplier for this sub-part
-                required_qty = get_bom_required_quantity(item, shortfall)
+                # Additional sub-part quantity for this increase in the parent's shortfall
+                required_qty = get_cascaded_quantity(
+                    item, shortfall_before, shortfall_after
+                )
 
                 components_to_process.append((sub_part, required_qty, level + 1))
                 data_output.total += 1
 
-                cascade_edges[sub_part.pk][part.pk] = (
-                    cascade_edges[sub_part.pk].get(part.pk, Decimal(0)) + required_qty
-                )
-
-                # The ratio is constant for a given (sub_part, parent) BOM
-                # relationship, so a plain assignment (not accumulation) is
-                # correct even if this pair is revisited.
-                cascade_ratios[sub_part.pk][part.pk] = get_bom_required_quantity(
-                    item, Decimal(1)
-                )
-
     # Determine *when* each part is projected to go into shortfall (not just
     # whether/how much) - see `compute_shortfall_dates` for the topological
     # cascade-dating approach.
-    shortfall_dates = compute_shortfall_dates(
-        requirements, cascade_edges, cascade_ratios
-    )
+    shortfall_dates = compute_shortfall_dates(requirements, cascade_edges)
 
     for pk, data in requirements.items():
         data["shortfall_date"] = shortfall_dates.get(pk)
