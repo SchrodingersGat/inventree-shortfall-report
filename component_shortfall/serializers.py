@@ -18,7 +18,7 @@ class ShortfallReportSerializer(serializers.Serializer):
         """Set horizon_months default from the plugin setting."""
         super().__init__(*args, **kwargs)
 
-        from plugin.registry import registry
+        from plugin import registry
 
         plugin = registry.get_plugin("component-shortfall")
         default_horizon = (
