@@ -2,7 +2,7 @@
 
 from django.contrib.auth.models import AnonymousUser, Group
 
-from plugin.registry import registry
+from plugin import registry
 
 from InvenTree.unit_test import InvenTreeTestCase
 
