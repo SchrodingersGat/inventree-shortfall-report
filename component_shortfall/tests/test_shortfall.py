@@ -55,7 +55,7 @@ class ShortfallTestCase(InvenTreeTestCase):
 
     def get_plugin(self):
         """Return the ComponentShortfall plugin instance."""
-        from plugin.registry import registry
+        from plugin import registry
 
         return registry.get_plugin('component-shortfall')
 

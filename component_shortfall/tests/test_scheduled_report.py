@@ -12,7 +12,7 @@ from company.models import Company
 from django.contrib.auth import get_user_model
 from order.models import SalesOrder, SalesOrderLineItem
 from part.models import Part
-from plugin.registry import registry
+from plugin import registry
 from stock.models import StockItem, StockLocation
 
 from InvenTree.unit_test import InvenTreeTestCase

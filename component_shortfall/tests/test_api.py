@@ -157,7 +157,7 @@ class ShortfallReportAPITests(ShortfallReportAPITestCase):
 
     def test_horizon_months_defaults_from_plugin_setting(self):
         """When horizon_months is not supplied, the plugin's configured default is used."""
-        from plugin.registry import registry
+        from plugin import registry
 
         plugin = registry.get_plugin('component-shortfall')
         plugin.set_setting('SHORTFALL_HORIZON_MONTHS', 3)
@@ -196,7 +196,7 @@ class ShortfallReportAPITests(ShortfallReportAPITestCase):
         the exported report always hid zero-shortfall rows regardless of the
         setting.
         """
-        from plugin.registry import registry
+        from plugin import registry
 
         location = StockLocation.objects.create(name='Location')
         StockItem.objects.create(part=self.assembly, quantity=1000, location=location)
@@ -226,7 +226,7 @@ class ShortfallReportAPITests(ShortfallReportAPITestCase):
         """Regression test: SHORTFALL_PARAMETER_TEMPLATE must be applied by the on-demand API, not just the scheduled task."""
         from common.models import Parameter, ParameterTemplate
         from django.contrib.contenttypes.models import ContentType
-        from plugin.registry import registry
+        from plugin import registry
 
         template = ParameterTemplate.objects.create(
             name='Shortfall', model_type=ContentType.objects.get_for_model(Part)
